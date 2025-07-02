@@ -10,7 +10,7 @@ const exportTasksReport = async(req, res) => {
         const tasks = await Task.find().populate('assignedTo', 'name email');
 
         const workbook = new excelJS.Workbook();
-        const worksheet = wordbook.addWorksheet("Tasks Report");
+        const worksheet = workbook.addWorksheet("Tasks Report");
 
         worksheet.columns = [
             { header: "Task ID", key: "_id", width: 25},
