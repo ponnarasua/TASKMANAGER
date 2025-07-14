@@ -1,13 +1,29 @@
 const Task = require('../models/Task');
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
+const { getDomain, isPublicDomain } = require('../utils/emailUtils');
 
 // @desc Get all users (Admin only)
 // @route GET /api/users/
 // @access Private (Admin)
 async function getUsers(req, res) {
     try {
-        const users = await User.find({ role: 'member' }).select("-password");
+        const adminEmail = req.user.email;
+        const domain = getDomain(adminEmail);
+
+        // Deny access if domain is public
+        if (isPublicDomain(domain)) {
+            return res.status(403).json({
+                message: "Access denied. Admins using public domains like Gmail cannot access users.",
+            });
+        }
+
+        // Get only users with the same domain
+        const users = await User.find({
+            role: 'member',
+            email: { $regex: `@${domain}$`, $options: 'i' }
+        }).select("-password");
+
         // Add task count to each user
         const usersWithTaskCounts = await Promise.all(users.map(async (user) => {
             const pendingTasks = await Task.countDocuments({ assignedTo: user._id, status: "Pending" });
