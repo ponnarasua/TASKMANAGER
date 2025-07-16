@@ -1,7 +1,7 @@
 const Task = require('../models/Task');
 const PUBLIC_DOMAINS = ['gmail.com', 'yahoo.com', 'outlook.com'];
 const getOrgDomain = (email) => email.split('@')[1];
-
+const mongoose = require('mongoose');
 
 // @desc   Get all tasks (Admin: all, User: only assigned tasks)
 // @route  GET /api/tasks
@@ -64,21 +64,24 @@ const getTasks = async (req, res) => {
 // @route  GET /api/tasks/:id
 // @access Private
 const getTaskById = async (req, res) => {
-  try {
-    const task = await Task.findById(req.params.id).populate("assignedTo", "name email profileImageUrl");
-    if (!task) return res.status(404).json({ message: "Task not found" });
+  const { id } = req.params;
 
-    if (req.user.role === 'admin') {
-      const domain = getOrgDomain(req.user.email);
-      if (PUBLIC_DOMAINS.includes(domain) || !task.assignedTo?.email.endsWith(`@${domain}`)) {
-        return res.status(403).json({ message: "Unauthorized for this task" });
-      }
-    } else if (!task.assignedTo.equals(req.user._id)) {
-      return res.status(403).json({ message: "Unauthorized" });
+  try {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid Task ID' });
     }
 
-    res.json(task);
+    const task = await Task.findById(id)
+      .populate('assignedTo')  // optional: remove temporarily if it crashes
+      .populate('createdBy');  // optional
+
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    res.status(200).json(task);
   } catch (error) {
+    console.error('❌ Error in getTaskById:', error.message);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
