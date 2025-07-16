@@ -1,52 +1,51 @@
-import axios from 'axios';
-import { BASE_URL } from './apiPaths';
+import axios from 'axios'
+import { BASE_URL } from './apiPaths'
 
 const axiosInstance = axios.create({
-    baseURL: BASE_URL,
-    timeout: 10000, 
-    withCredentials: true, // Include credentials (cookies) in request
-    headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-    },
-});
+  baseURL: BASE_URL,
+  timeout: 10000,
+  withCredentials: true, // Include credentials (cookies) in request
+  headers: {
+    'Content-Type': 'application/json',
+    Accept: 'application/json'
+  }
+})
 
-//Request Interceptor
+// Request Interceptor
 axiosInstance.interceptors.request.use(
-    (config) => {
-        const accessToken = localStorage.getItem('token');
-        if(accessToken){
-            config.headers.Authorization = `Bearer ${accessToken}`;
-        }
-        return config;
-    
-},
-    (error) => {
-        return Promise.reject(error);
+  (config) => {
+    const accessToken = localStorage.getItem('token')
+    if (accessToken) {
+      config.headers.Authorization = `Bearer ${accessToken}`
     }
-);
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  }
+)
 
-//Response Interceptor
+// Response Interceptor
 axiosInstance.interceptors.response.use(
-    (response) => {
-        return response;
-    },
-    (error) => {
-        // Handle common errors globally
-        if(error.response){
-            if(error.response.status === 401){
-                // Redirect to login page
-                window.location.href = '/login';
-            }else if(error.response.status === 500){
-                // Handle server error
-                alert('Internal server error. Please try again later.');
-            }
-        }else if(error.code === 'ECONNABORTED'){
-            // Handle network error
-            alert('Request timed out. Please check your internet connection and try again.');
-        }
-        return Promise.reject(error);
+  (response) => {
+    return response
+  },
+  (error) => {
+    // Handle common errors globally
+    if (error.response) {
+      if (error.response.status === 401) {
+        // Redirect to login page
+        window.location.href = '/login'
+      } else if (error.response.status === 500) {
+        // Handle server error
+        alert('Internal server error. Please try again later.')
+      }
+    } else if (error.code === 'ECONNABORTED') {
+      // Handle network error
+      alert('Request timed out. Please check your internet connection and try again.')
     }
-);
-    
-export default axiosInstance;
+    return Promise.reject(error)
+  }
+)
+
+export default axiosInstance

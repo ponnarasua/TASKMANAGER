@@ -1,23 +1,23 @@
-import React, { useEffect, useState } from 'react';
-import UI_IMG from '../../assets/images/auth-img.png';
+import React, { useEffect, useState } from 'react'
+import UI_IMG from '../../assets/images/auth-img.png'
 
 const AuthLayout = ({ children }) => {
-  const [showImage, setShowImage] = useState(true);
+  const [showImage, setShowImage] = useState(true)
 
   useEffect(() => {
     const checkWidth = () => {
-      const screenWidth = window.screen.width;
-      const windowWidth = window.innerWidth;
+      const screenWidth = window.screen.width
+      const windowWidth = window.innerWidth
 
       // Hide image if window width is 50% or less of the screen width
-      setShowImage(windowWidth > screenWidth / 2);
-    };
+      setShowImage(windowWidth > screenWidth / 2)
+    }
 
-    checkWidth(); // Initial check
-    window.addEventListener('resize', checkWidth);
+    checkWidth() // Initial check
+    window.addEventListener('resize', checkWidth)
 
-    return () => window.removeEventListener('resize', checkWidth);
-  }, []);
+    return () => window.removeEventListener('resize', checkWidth)
+  }, [])
 
   return (
     <div className='flex h-screen'>
@@ -32,11 +32,10 @@ const AuthLayout = ({ children }) => {
         </div>
       )}
     </div>
-  );
-};
+  )
+}
 
-export default AuthLayout;
-
+export default AuthLayout
 
 // import React from 'react';
 // import UI_IMG from '../../assets/images/auth-img.png';
