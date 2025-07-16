@@ -1,22 +1,25 @@
+import axiosInstance from './axiosInstance'; // 🔁 instead of plain axios
 import { API_PATHS } from './apiPaths';
-import axiosInstance from './axiosInstance';
 
-const uploadImage = async (imageFile) => {
-    const formData = new FormData();
-    // Append image file to form data
-    formData.append('image', imageFile);
+const uploadImage = async (file) => {
+  const fileName = `${Date.now()}_${file.name}`;
 
-    try{
-        const response = await axiosInstance.post(API_PATHS.IMAGE.UPLOAD_IMAGE, formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
-        });
-        return response.data;
-    }catch(error){
-        console.error("Error uploading image:", error);
-        throw error;
-    }
+  try {
+    console.log("📥 Upload Request Body:", {
+  filePreview: file?.substring(0, 100),
+  fileName
+});
+
+    const response = await axiosInstance.post(API_PATHS.IMAGE.UPLOAD_IMAGE, {
+      file,
+      fileName,
+    });
+    console.log("✅ ImageKit response:", response.data);
+    return response.data;
+  } catch (err) {
+    console.error("❌ uploadImage failed:", err.response?.data || err.message);
+    throw err;
+  }
 };
 
 export default uploadImage;
