@@ -1,61 +1,59 @@
 import React, { useState, useContext } from 'react'
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom'
 import AuthLayout from '../../components/layout/AuthLayout'
-import { validateEmail } from '../../utils/helper';
-import ProfilePhotoSelector from '../../components/Inputs/ProfilePhotoSelector';
-import Input from '../../components/Inputs/Input';
-import { Link } from 'react-router-dom';
-import axiosInstance from '../../utils/axiosInstance';
-import { API_PATHS } from '../../utils/apiPaths';
-import { UserContext } from '../../context/userContext';
-import uploadImage from '../../utils/uploadImage';
+import { validateEmail } from '../../utils/helper'
+import ProfilePhotoSelector from '../../components/Inputs/ProfilePhotoSelector'
+import Input from '../../components/Inputs/Input'
+import axiosInstance from '../../utils/axiosInstance'
+import { API_PATHS } from '../../utils/apiPaths'
+import { UserContext } from '../../context/userContext'
+import uploadImage from '../../utils/uploadImage'
 
 const SignUp = () => {
-  const [profilePic, setProfilePic] = useState(null);
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [adminInviteToken, setAdminInviteToken] = useState("");
+  const [profilePic, setProfilePic] = useState(null)
+  const [fullName, setFullName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [adminInviteToken, setAdminInviteToken] = useState('')
 
-  const [error, setError] = useState(null);
+  const [error, setError] = useState(null)
 
-  const { updateUser } = useContext(UserContext);
-  const navigate = useNavigate();
+  const { updateUser } = useContext(UserContext)
+  const navigate = useNavigate()
 
-  //Handle SignUp Form Submit
+  // Handle SignUp Form Submit
   const handleSignUp = async (e) => {
-    e.preventDefault();
+    e.preventDefault()
 
-    let profileImageUrl = '';
+    let profileImageUrl = ''
 
     if (!fullName) {
-      setError('Please enter your full name');
-      return;
+      setError('Please enter your full name')
+      return
     }
 
     if (!validateEmail(email)) {
-      setError('Please enter a valid email address');
-      return;
+      setError('Please enter a valid email address')
+      return
     }
 
     if (!password) {
-      setError('Please enter your password');
-      return;
+      setError('Please enter your password')
+      return
     }
     if (password.length < 8) {
-      setError('Password must be at least 8 characters long');
-      return;
+      setError('Password must be at least 8 characters long')
+      return
     }
 
-    setError("");
+    setError('')
 
-    //SignUp API CALL
+    // SignUp API CALL
     try {
-
       // Upload profile image if present
       if (profilePic) {
-        const imgUploadRes = await uploadImage(profilePic);
-        profileImageUrl = imgUploadRes.imageUrl || "";
+        const imgUploadRes = await uploadImage(profilePic)
+        profileImageUrl = imgUploadRes.imageUrl || ''
       }
 
       const response = await axiosInstance.post(API_PATHS.AUTH.REGISTER, {
@@ -64,27 +62,27 @@ const SignUp = () => {
         password,
         profileImageUrl,
         adminInviteToken
-      });
+      })
 
-      const { token, role } = response.data;
+      const { token, role } = response.data
 
       if (token) {
-        localStorage.setItem('token', token);
-        updateUser(response.data);
+        localStorage.setItem('token', token)
+        updateUser(response.data)
         if (role === 'admin') {
-          navigate('/admin/dashboard');
+          navigate('/admin/dashboard')
         } else {
-          navigate('/user/dashboard');
+          navigate('/user/dashboard')
         }
       }
     } catch (error) {
       if (error.response && error.response.data.message) {
-        setError(error.response.data.message);
+        setError(error.response.data.message)
       } else {
-        setError("Something went wrong. Please try again later.");
+        setError('Something went wrong. Please try again later.')
       }
     }
-  };
+  }
 
   return (
     <AuthLayout>
@@ -132,7 +130,7 @@ const SignUp = () => {
           </button>
 
           <p className='text-[13px] text-slate-700 mt-3'>
-            Already have an account?{" "}
+            Already have an account?{' '}
             <Link className='font-medium text-primary underline' to='/login'>
               Log In
             </Link>

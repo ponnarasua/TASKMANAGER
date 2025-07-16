@@ -1,9 +1,9 @@
-const publicDomains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com'];
-function getDomain(email) {
-  return email.split('@')[1].toLowerCase();
+const publicDomains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com']
+function getDomain (email) {
+  return email.split('@')[1].toLowerCase()
 }
-function isPublicDomain(domain) {
-  return publicDomains.includes(domain);
+function isPublicDomain (domain) {
+  return publicDomains.includes(domain)
 }
 
-module.exports = { getDomain, isPublicDomain };
+module.exports = { getDomain, isPublicDomain }
