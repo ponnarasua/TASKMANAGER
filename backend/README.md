@@ -7,7 +7,7 @@ This directory contains the backend code for the TaskManager application. It exp
 - RESTful API for task CRUD operations
 - Database integration (e.g., MongoDB)
 - Request validation & error handling
-- (Optional) User authentication
+- User authentication
 
 ## Tech Stack
 
@@ -32,16 +32,6 @@ This directory contains the backend code for the TaskManager application. It exp
     ```
     npm start
     ```
-
-## API Endpoints
-
-| Method | Endpoint     | Description         |
-|--------|-------------|---------------------|
-| GET    | /tasks      | List all tasks      |
-| GET    | /tasks/:id  | Get a single task   |
-| POST   | /tasks      | Create a new task   |
-| PUT    | /tasks/:id  | Update a task       |
-| DELETE | /tasks/:id  | Delete a task       |
 
 ## License
 
