@@ -12,26 +12,25 @@ const generateToken = (userId) => {
 // @desc Register a new user
 // @route POST /api/auth/register
 // @access Public
-const registerUser = async (req , res)=>{
-    try{
-        const { name, email, password , profileImageUrl, adminInviteToken } = req.body;
-        // Check if user already exists
-        const userExists = await User.findOne({email});
-        if(userExists){
-            return res.status(401).json({message: 'User already exists'});
+const registerUser = async (req , res) => {
+    try {
+        let { name, email, password , profileImageUrl, adminInviteToken } = req.body;
+
+        const userExists = await User.findOne({ email });
+        if (userExists) {
+            return res.status(401).json({ message: 'User already exists' });
         }
 
-        // Determine user role : Admin if correct token is provided, otherwise member
         let role = 'member';
-        if(adminInviteToken && adminInviteToken === process.env.ADMIN_INVITE_TOKEN){
+        if (adminInviteToken && adminInviteToken === process.env.ADMIN_INVITE_TOKEN) {
             role = 'admin';
         }
 
-        // Hash password
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        // Create new user
+        profileImageUrl = profileImageUrl?.replace(/^https:\/\/res\.cloudinary\.com\/dqhu7vgbc\/image\/upload\//, '');
+
         const user = await User.create({
             name,
             email,
@@ -39,8 +38,7 @@ const registerUser = async (req , res)=>{
             profileImageUrl,
             role
         });
-        
-        // Return user data with JWT
+
         res.status(201).json({
             _id: user._id,
             name: user.name,
@@ -49,10 +47,11 @@ const registerUser = async (req , res)=>{
             role: user.role,
             token: generateToken(user._id),
         });
-    } catch(error){
-        res.status(500).json({message: 'Server error', error: error.message});
+    } catch (error) {
+        res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
+
 
 // @desc Login user
 // @route POST /api/auth/login

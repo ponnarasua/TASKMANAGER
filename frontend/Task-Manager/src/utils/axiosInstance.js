@@ -3,12 +3,7 @@ import { BASE_URL } from './apiPaths';
 
 const axiosInstance = axios.create({
     baseURL: BASE_URL,
-    timeout: 10000, 
     withCredentials: true, // Include credentials (cookies) in request
-    headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-    },
 });
 
 //Request Interceptor

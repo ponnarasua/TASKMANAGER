@@ -14,10 +14,10 @@ const app = express();
 // Middleware to handle CORS
 app.use(
   cors({
-    origin: "http://localhost:5173", // your frontend
+    origin: "http://localhost:5173", // ✅ Replace with actual frontend origin
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true, // VERY IMPORTANT for cookies
+    credentials: true, // ✅ Required for cookies/auth headers
   })
 );
 
@@ -57,4 +57,4 @@ app.use((err, req, res, next) => {
 
 //Start Server
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+app.listen(PORT, "0.0.0.0",() => console.log(`Server is running on port ${PORT}`));
