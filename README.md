@@ -13,7 +13,7 @@ A web-based application to manage and track your tasks efficiently in Organizati
 ## Project Structure
 
 - `backend/` - Backend REST API (Node.js/Express)
-- `frontend/` - Frontend application (React)
+- `frontend/task-manager` - Frontend application (React)
   
 ## Getting Started
 
