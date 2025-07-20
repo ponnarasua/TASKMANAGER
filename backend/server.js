@@ -14,13 +14,17 @@ const app = express();
 // Middleware to handle CORS
 app.use(
   cors({
-    origin: "http://localhost:5173", // ✅ Replace with actual frontend origin
+    origin: [
+      "http://localhost:5173",
+      "https://task-manager-org.vercel.app",
+      "https://taskmanager-ponnarasu-projects.vercel.app",
+      "https://taskmanager-git-main-ponnarasu-projects.vercel.app",
+    ],
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true, // ✅ Required for cookies/auth headers
+    credentials: true,
   })
 );
-
 
 // Middleware
 app.use(express.json());
