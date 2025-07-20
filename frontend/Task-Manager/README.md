@@ -1,4 +1,5 @@
-# TASKMANAGER Frontend
+# TASKMANAGER 
+# Frontend
 
 This directory contains the React frontend for the TaskManager app. It communicates with the backend API for all task operations.
 
