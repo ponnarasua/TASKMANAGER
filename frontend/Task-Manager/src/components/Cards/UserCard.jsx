@@ -1,5 +1,5 @@
 import React from 'react'
-import User from '../../assets/images/user.png'
+import User from '../../assets/images/User.png'
 
 const UserCard = ({userInfo}) => {
 
