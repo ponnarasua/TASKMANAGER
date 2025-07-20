@@ -38,7 +38,7 @@ A web-based application to manage and track your tasks efficiently in Organizati
 
 3. **Install frontend dependencies:**
     ```
-    cd ../frontend
+    cd ../frontend/task-manager
     npm install
     ```
 
@@ -47,16 +47,16 @@ A web-based application to manage and track your tasks efficiently in Organizati
 1. **Start the backend:**
     ```
     cd backend
-    npm start
+    npm run dev
     ```
 
 2. **Start the frontend:**
     ```
-    cd ../frontend
-    npm start
+    cd ../frontend/task-manager
+    npm run dev
     ```
 
-- Frontend runs on: `http://localhost:3000`
+- Frontend runs on: `http://localhost:5173`
 - Backend runs on: `http://localhost:5000` (or as configured)
 
 ## Contributing
