@@ -1,6 +1,6 @@
 # TASKMANAGER
 
-A web-based application to manage and track your tasks efficiently. This project is structured with a dedicated backend API and a modern frontend interface, providing create, read, update, and delete (CRUD) functionality for tasks.
+A web-based application to manage and track your tasks efficiently in Organization. This project is structured with a dedicated backend API and a modern frontend interface, providing create, read, update, and delete (CRUD) functionality for tasks.
 
 ## Features
 
