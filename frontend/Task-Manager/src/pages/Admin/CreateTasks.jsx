@@ -120,7 +120,6 @@ const CreateTasks = () => {
       const response = await axiosInstance.get(API_PATHS.TASKS.GET_TASK_BY_ID(taskId));
       if(response.data) {
         const task = response.data;
-        console.log("Fetched Task:", task);
         setCurrentTask(task);
         setTaskData({
           title: task.title,

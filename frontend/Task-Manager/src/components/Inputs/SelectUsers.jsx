@@ -17,7 +17,7 @@ const SelectUsers = ({ selectedUsers, setSelectedUsers }) => {
         setAllUsers(response.data);
       }
     } catch (error) {
-      console.log("Error fetching Users", error);
+      console.error("Error fetching Users", error);
     }
   };
 

@@ -40,7 +40,6 @@ const ManageTasks = () => {
   };
 
   const handleClick = (taskData) => {
-    console.log("Task Data:", taskData);
     navigate(`/admin/create-tasks/${taskData._id}`);
   };
 
