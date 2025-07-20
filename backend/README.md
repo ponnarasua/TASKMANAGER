@@ -30,7 +30,7 @@ This directory contains the backend code for the TaskManager application. It exp
 
 3. Start the backend server:
     ```
-    npm start
+    npm run dev
     ```
 
 ## License
