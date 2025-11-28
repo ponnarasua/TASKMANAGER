@@ -4,6 +4,12 @@ export const API_PATHS = {
         REGISTER: '/api/auth/register',
         LOGIN: '/api/auth/login',
         GET_PROFILE: '/api/auth/profile',
+        SEND_REGISTRATION_OTP: '/api/auth/send-registration-otp',
+        VERIFY_REGISTRATION_OTP: '/api/auth/verify-registration-otp',
+        FORGOT_PASSWORD: '/api/auth/forgot-password',
+        RESET_PASSWORD: '/api/auth/reset-password',
+        DELETE_ACCOUNT_REQUEST: '/api/auth/delete-account-request',
+        CONFIRM_DELETE_ACCOUNT: '/api/auth/confirm-delete-account',
     },
 
     USERS: {

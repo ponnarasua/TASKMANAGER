@@ -6,12 +6,16 @@ import { API_PATHS } from '../../utils/apiPaths';
 import { LuFileSpreadsheet } from 'react-icons/lu';
 import TaskStatusTabs from '../../components/TaskStatusTabs';
 import TaskCard from '../../components/Cards/TaskCard';
+import PriorityFilter from '../../components/PriorityFilter';
 import toast from 'react-hot-toast';
 
 const MyTasks = () => {
   const [allTasks, setAllTasks] = useState([]);
   const [tabs, setTabs] = useState([]);
   const [filterStatus, setFilterStatus] = useState("All");
+  const [priorityFilter, setPriorityFilter] = useState("All");
+  const [sortOrder, setSortOrder] = useState("desc");
+  const [filteredAndSortedTasks, setFilteredAndSortedTasks] = useState([]);
 
   const navigate = useNavigate();
 
@@ -43,42 +47,115 @@ const MyTasks = () => {
     navigate(`/user/task-details/${taskId}`);
   };
 
+  // Filter and sort tasks based on priority and sort order
+  const filterAndSortTasks = () => {
+    let filtered = [...allTasks];
+
+    // Filter by priority
+    if (priorityFilter !== "All") {
+      filtered = filtered.filter(task => task.priority === priorityFilter);
+    }
+
+    // Sort tasks
+    filtered.sort((a, b) => {
+      switch (sortOrder) {
+        case "desc":
+          // High > Medium > Low
+          const priorityOrder = { "High": 3, "Medium": 2, "Low": 1 };
+          return (priorityOrder[b.priority] || 0) - (priorityOrder[a.priority] || 0);
+        case "asc":
+          // Low > Medium > High
+          const priorityOrderAsc = { "High": 1, "Medium": 2, "Low": 3 };
+          return (priorityOrderAsc[b.priority] || 0) - (priorityOrderAsc[a.priority] || 0);
+        case "newest":
+          return new Date(b.createdAt) - new Date(a.createdAt);
+        case "oldest":
+          return new Date(a.createdAt) - new Date(b.createdAt);
+        default:
+          return 0;
+      }
+    });
+
+    setFilteredAndSortedTasks(filtered);
+  };
+
   useEffect(() => {
     getAllTasks();
   }, [filterStatus]);
+
+  useEffect(() => {
+    filterAndSortTasks();
+  }, [allTasks, priorityFilter, sortOrder]);
 
   return (
     <DashboardLayout activeMenu="My Tasks">
       <div className="my-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between">
           <h2 className="text-xl font-medium">My Tasks</h2>
-            {tabs?.[0]?.count > 0 && (
-              <TaskStatusTabs
-                tabs={tabs}
-                activeTab={filterStatus}
-                setActiveTab={setFilterStatus}
-              />
-            )}
+          {tabs && tabs.length > 0 && (
+            <TaskStatusTabs
+              tabs={tabs}
+              activeTab={filterStatus}
+              setActiveTab={setFilterStatus}
+            />
+          )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-          {allTasks?.map((item) => (
-            <TaskCard
-            key={item._id}
-            title={item.title}
-            description={item.description}
-            priority={item.priority}
-            status={item.status}
-            progress={item.progress}
-            createdAt={item.createdAt}
-            dueDate={item.dueDate}
-            assignedTo={item.assignedTo?.map((user) => user.profileImageUrl)}
-            attachmentCount={item.attachments?.length || 0}
-            completedTodoCount={item.completedCount || 0}
-            todoChecklist={item.todoChecklist || []}
-            onClick={() => handleClick(item._id)}          
+        {/* Priority Filter and Sort */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">Filter & Sort:</span>
+            <PriorityFilter
+              selectedPriority={priorityFilter}
+              onPriorityChange={setPriorityFilter}
+              sortOrder={sortOrder}
+              onSortOrderChange={setSortOrder}
             />
-          ))}
+          </div>
+          <div className="text-sm text-gray-500">
+            Showing {filteredAndSortedTasks.length} of {allTasks.length} tasks
+          </div>
+        </div>
+
+        <div className="mt-4">
+          {filteredAndSortedTasks && filteredAndSortedTasks.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {filteredAndSortedTasks.map((item) => (
+                <TaskCard
+                key={item._id}
+                title={item.title}
+                description={item.description}
+                priority={item.priority}
+                status={item.status}
+                progress={item.progress}
+                createdAt={item.createdAt}
+                dueDate={item.dueDate}
+                assignedTo={item.assignedTo?.map((user) => user.profileImageUrl)}
+                attachmentCount={item.attachments?.length || 0}
+                completedTodoCount={item.completedCount || 0}
+                todoChecklist={item.todoChecklist || []}
+                onClick={() => handleClick(item._id)}          
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="bg-gray-50 rounded-full p-6 mb-4">
+                <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                No {filterStatus === 'All' ? '' : filterStatus.toLowerCase()} tasks found
+              </h3>
+              <p className="text-gray-500 max-w-md">
+                {filterStatus === 'All' 
+                  ? "You don't have any tasks assigned yet. Tasks will appear here once they are created and assigned to you."
+                  : `You don't have any ${filterStatus.toLowerCase()} tasks. Try switching to a different filter to see your other tasks.`
+                }
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </DashboardLayout>

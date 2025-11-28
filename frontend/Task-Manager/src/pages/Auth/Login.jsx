@@ -88,10 +88,15 @@ const Login = () => {
 
             <button type='submit' className='btn-primary'>LOGIN</button>
 
-            <p className='text-[13px] text-slate-700 mt-3'>
-              Don't have an account?{" "}
-              <Link className='font-medium text-primary underline' to ='/signup'>Sign Up</Link>
-            </p>
+            <div className='flex items-center justify-between mt-3'>
+              <p className='text-[13px] text-slate-700'>
+                Don't have an account?{" "}
+                <Link className='font-medium text-primary underline' to ='/signup'>Sign Up</Link>
+              </p>
+              <Link className='text-[13px] font-medium text-primary underline' to='/forgot-password'>
+                Forgot Password?
+              </Link>
+            </div>
         </form>
       </div>
     </AuthLayout>

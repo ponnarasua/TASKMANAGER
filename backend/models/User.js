@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { USER_ROLES } = require('../utils/constants');
 
 const UserSchema = new mongoose.Schema({
     name: {
@@ -8,7 +9,9 @@ const UserSchema = new mongoose.Schema({
     email: {
         type: String,
         required: true,
-        unique: true
+        unique: true,
+        lowercase: true,
+        trim: true
     },
     password: {
         type: String,
@@ -20,11 +23,26 @@ const UserSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['admin', 'member'],
-        default: 'member'
+        enum: Object.values(USER_ROLES),
+        default: USER_ROLES.MEMBER
+    },
+    isEmailVerified: {
+        type: Boolean,
+        default: false
+    },
+    accountStatus: {
+        type: String,
+        enum: ['active', 'pending-deletion', 'deleted'],
+        default: 'active'
     }
 }, {
     timestamps: true
 }
 );
+
+// Indexes for better query performance
+UserSchema.index({ email: 1 });
+UserSchema.index({ role: 1 });
+UserSchema.index({ email: 1, role: 1 });
+
 module.exports  = mongoose.model('User', UserSchema);

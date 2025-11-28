@@ -58,6 +58,41 @@ const getUserById = async (req, res) => {
     }
 };
 
+// @desc Update user profile (own profile)
+// @route PUT /api/users/:id
+// @access Private
+const updateUser = async (req, res) => {
+    try {
+        const { name, profileImageUrl } = req.body;
+        const userId = req.params.id;
+
+        // Check if user exists
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        // Only allow users to update their own profile (or admins can update any)
+        if (req.user._id.toString() !== userId && req.user.role !== 'admin') {
+            return res.status(403).json({ message: "Not authorized to update this profile" });
+        }
+
+        // Update fields if provided
+        if (name) user.name = name;
+        if (profileImageUrl !== undefined) user.profileImageUrl = profileImageUrl;
+
+        await user.save();
+
+        // Return updated user without password
+        const updatedUser = await User.findById(userId).select("-password");
+        res.json({ message: "Profile updated successfully", user: updatedUser });
+
+    } catch (error) {
+        console.error('Update user error:', error);
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+};
+
 // // @desc Delete a user (Admin only)
 // // @route DELETE /api/:id
 // // @access Private (Admin)
@@ -69,4 +104,4 @@ const getUserById = async (req, res) => {
 //     }
 // };
 
-module.exports = { getUsers, getUserById };
+module.exports = { getUsers, getUserById, updateUser };

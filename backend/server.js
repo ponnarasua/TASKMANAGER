@@ -12,14 +12,13 @@ const reportRoutes = require("./routes/reportRoutes");
 const app = express();
 
 // Middleware to handle CORS
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',') 
+  : ["http://localhost:5173"];
+
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "https://task-manager-org.vercel.app",
-      "https://taskmanager-ponnarasu-projects.vercel.app",
-      "https://taskmanager-git-main-ponnarasu-projects.vercel.app",
-    ],
+    origin: allowedOrigins,
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,

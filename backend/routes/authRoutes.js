@@ -1,14 +1,44 @@
 const express = require('express')
 const { registerUser, loginUser, getUserProfile, updateUserProfile } = require('../controllers/authController');
+const { 
+    sendRegistrationOTPHandler,
+    verifyRegistrationOTPHandler,
+    forgotPasswordHandler,
+    resetPasswordHandler,
+    deleteAccountRequestHandler,
+    confirmDeleteAccountHandler
+} = require('../controllers/otpController');
 const { protect } = require('../middlewares/authMiddleware');
-const { $where } = require('../models/User');
+const { 
+    validateRegistration, 
+    validateLogin,
+    validateOTPVerification,
+    validateForgotPassword,
+    validateResetPassword,
+    validateDeleteAccountOTP
+} = require('../utils/validation');
+const { loginLimiter, registerLimiter, strictLimiter } = require('../middlewares/rateLimiter');
 const upload = require('../middlewares/uploadMiddleware');
 const cloudinary = require('../config/cloudinary');
 const router = express.Router();
 
-// Auth Routes
-router.post('/register', registerUser);
-router.post('/login', loginUser);
+// Auth Routes (Legacy - kept for backward compatibility)
+router.post('/register', registerLimiter, validateRegistration, registerUser);
+router.post('/login', loginLimiter, validateLogin, loginUser);
+
+// OTP-based Registration Routes
+router.post('/send-registration-otp', registerLimiter, validateRegistration, sendRegistrationOTPHandler);
+router.post('/verify-registration-otp', validateOTPVerification, verifyRegistrationOTPHandler);
+
+// Password Reset Routes
+router.post('/forgot-password', strictLimiter, validateForgotPassword, forgotPasswordHandler);
+router.post('/reset-password', validateResetPassword, resetPasswordHandler);
+
+// Account Deletion Routes
+router.post('/delete-account-request', protect, deleteAccountRequestHandler);
+router.post('/confirm-delete-account', protect, validateDeleteAccountOTP, confirmDeleteAccountHandler);
+
+// Profile Routes
 router.get('/profile', protect, getUserProfile);
 router.put('/profile', protect, updateUserProfile);
 

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { TASK_STATUS, TASK_PRIORITY } = require('../utils/constants');
 
 const todoSchema = new mongoose.Schema({
     text: {
@@ -16,13 +17,13 @@ const taskSchema = new mongoose.Schema({
     description: String,
     priority: {
         type: String,
-        enum: ['Low', 'Medium', 'High'],
-        default: 'Medium'
+        enum: Object.values(TASK_PRIORITY),
+        default: TASK_PRIORITY.MEDIUM
     },
     status: {
         type: String,
-        enum: ['Pending', 'In Progress', 'Completed'],
-        default: 'Pending'
+        enum: Object.values(TASK_STATUS),
+        default: TASK_STATUS.PENDING
     },
     dueDate: { type: Date, required: true },
     assignedTo: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
@@ -33,5 +34,13 @@ const taskSchema = new mongoose.Schema({
 }, {
     timestamps: true
 });
+
+// Indexes for better query performance
+taskSchema.index({ assignedTo: 1 });
+taskSchema.index({ status: 1 });
+taskSchema.index({ createdBy: 1 });
+taskSchema.index({ dueDate: 1 });
+taskSchema.index({ assignedTo: 1, status: 1 });
+taskSchema.index({ status: 1, dueDate: 1 });
 
 module.exports = mongoose.model('Task', taskSchema);

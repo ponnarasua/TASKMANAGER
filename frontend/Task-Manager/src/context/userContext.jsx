@@ -23,12 +23,13 @@ const UserProvider = ({children}) => {
                 setUser(response.data);
             }catch(error){
                 console.error("User not authenticated", error);
+                localStorage.removeItem('token');
             }finally{
                 setLoading(false);
             }
         };
         fetchUser();
-    }, []);
+    }, [user]);
 
     const updateUser = (userData) => {
         setUser(userData);
