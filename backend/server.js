@@ -33,7 +33,8 @@ app.use(
 );
 
 // ✅ MUST be added for preflight
-app.options("*", cors());
+app.options(/.*/, cors());
+
 
 
 // Middleware
