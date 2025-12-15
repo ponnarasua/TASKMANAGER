@@ -14,25 +14,11 @@ const app = express();
 // Middleware to handle CORS
 const allowedOrigins = process.env.ALLOWED_ORIGINS.split(",");
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // allow requests with no origin (Postman, curl)
-      if (!origin) return callback(null, true);
+app.use(cors({
+  origin: "https://task-manager-org.vercel.app",
+  credentials: true,
+}));
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      } else {
-        return callback(new Error("Not allowed by CORS"));
-      }
-    },
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  })
-);
-
-// ✅ MUST be added for preflight
 app.options(/.*/, cors());
 
 
