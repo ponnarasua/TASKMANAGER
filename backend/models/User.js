@@ -41,7 +41,7 @@ const UserSchema = new mongoose.Schema({
 );
 
 // Indexes for better query performance
-UserSchema.index({ email: 1 });
+// Note: email index is already created by 'unique: true' in the schema
 UserSchema.index({ role: 1 });
 UserSchema.index({ email: 1, role: 1 });
 
