@@ -11,6 +11,10 @@ const reportRoutes = require("./routes/reportRoutes");
 
 const app = express();
 
+// Trust proxy - required for apps behind reverse proxies (Render, Heroku, etc.)
+// This enables express-rate-limit to correctly identify clients by their IP
+app.set('trust proxy', 1);
+
 // Middleware to handle CORS
 const allowedOrigins = process.env.ALLOWED_ORIGINS;
 

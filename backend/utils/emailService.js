@@ -1,14 +1,26 @@
 const nodemailer = require('nodemailer');
 
-// Create transporter
+// Create transporter with improved timeout settings
 const createTransporter = () => {
     return nodemailer.createTransport({
         host: process.env.EMAIL_HOST,
-        port: process.env.EMAIL_PORT,
+        port: parseInt(process.env.EMAIL_PORT) || 587,
         secure: process.env.EMAIL_SECURE === 'true', // true for 465, false for other ports
         auth: {
             user: process.env.EMAIL_USER,
             pass: process.env.EMAIL_PASSWORD,
+        },
+        // Connection timeout settings
+        connectionTimeout: 10000, // 10 seconds
+        greetingTimeout: 10000,   // 10 seconds
+        socketTimeout: 15000,     // 15 seconds
+        // Enable connection pooling for better performance
+        pool: true,
+        maxConnections: 5,
+        maxMessages: 100,
+        // TLS options for secure connections
+        tls: {
+            rejectUnauthorized: process.env.NODE_ENV === 'production',
         },
     });
 };
