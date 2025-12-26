@@ -18,6 +18,7 @@ export const API_PATHS = {
         CREATE_USER: '/api/users',
         UPDATE_USER: (userId) => `/api/users/${userId}`,
         DELETE_USER: (userId) => `/api/users/${userId}`,
+        SEARCH_USERS: '/api/users/search',
     },
 
     TASKS: {
@@ -31,6 +32,32 @@ export const API_PATHS = {
 
         UPDATE_TASK_STATUS: (taskId) => `/api/tasks/${taskId}/status`,
         UPDATE_TODO_CHECKLIST: (taskId) => `/api/tasks/${taskId}/todo`,
+
+        // Comments
+        GET_COMMENTS: (taskId) => `/api/tasks/${taskId}/comments`,
+        ADD_COMMENT: (taskId) => `/api/tasks/${taskId}/comments`,
+        DELETE_COMMENT: (taskId, commentId) => `/api/tasks/${taskId}/comments/${commentId}`,
+
+        // Activity Log
+        GET_ACTIVITY_LOG: (taskId) => `/api/tasks/${taskId}/activity`,
+
+        // Labels
+        GET_ALL_LABELS: '/api/tasks/labels/all',
+        ADD_LABELS: (taskId) => `/api/tasks/${taskId}/labels`,
+        REMOVE_LABEL: (taskId, label) => `/api/tasks/${taskId}/labels/${encodeURIComponent(label)}`,
+
+        // Reminders
+        TRIGGER_REMINDERS: '/api/tasks/reminders/trigger',
+        SEND_REMINDER: (taskId) => `/api/tasks/${taskId}/send-reminder`,
+    },
+
+    NOTIFICATIONS: {
+        GET_ALL: '/api/notifications',
+        GET_UNREAD_COUNT: '/api/notifications/unread-count',
+        MARK_AS_READ: (id) => `/api/notifications/${id}/read`,
+        MARK_ALL_READ: '/api/notifications/read-all',
+        DELETE: (id) => `/api/notifications/${id}`,
+        CLEAR_ALL: '/api/notifications/clear-all',
     },
 
     REPORTS: {

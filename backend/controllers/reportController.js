@@ -1,10 +1,8 @@
 const Task = require('../models/Task');
 const User = require('../models/User');
 const excelJS = require('exceljs');
-
-const PUBLIC_DOMAINS = ['gmail.com', 'yahoo.com', 'outlook.com'];
-
-const getOrgDomain = (email) => email.split('@')[1];
+const { getOrgDomain, isPublicDomain, buildOrgEmailRegex } = require('../utils/domainHelper');
+const { sendError, sendForbidden } = require('../utils/responseHelper');
 
 // @desc Export all tasks as an Excel file (Org-based)
 // @route GET /api/reports/export/tasks
@@ -12,15 +10,16 @@ const getOrgDomain = (email) => email.split('@')[1];
 const exportTasksReport = async(req, res) => {
     try {
         const domain = getOrgDomain(req.user.email);
-        if (PUBLIC_DOMAINS.includes(domain)) {
-            return res.status(403).json({ message: 'Export not allowed for public domain admins.' });
+        if (isPublicDomain(domain)) {
+            return sendForbidden(res, 'Export not allowed for public domain admins.');
         }
 
+        const emailRegex = buildOrgEmailRegex(domain);
         const tasks = await Task.find()
             .populate({
                 path: 'assignedTo',
                 select: 'name email',
-                match: { email: { $regex: `@${domain}$`, $options: 'i' } }
+                match: { email: emailRegex }
             });
 
         const workbook = new excelJS.Workbook();
@@ -59,7 +58,7 @@ const exportTasksReport = async(req, res) => {
         return workbook.xlsx.write(res).then(() => res.status(200).end());
 
     } catch (error) {
-        res.status(500).json({ message: "Error exporting tasks", error: error.message });
+        sendError(res, 'Error exporting tasks', 500, error);
     }
 };
 
@@ -69,18 +68,19 @@ const exportTasksReport = async(req, res) => {
 const exportUsersReport = async (req, res) => {
     try {
         const domain = getOrgDomain(req.user.email);
-        if (PUBLIC_DOMAINS.includes(domain)) {
-            return res.status(403).json({ message: 'Export not allowed for public domain admins.' });
+        if (isPublicDomain(domain)) {
+            return sendForbidden(res, 'Export not allowed for public domain admins.');
         }
 
-        const users = await User.find({ email: { $regex: `@${domain}$`, $options: 'i' } }).select("name email _id").lean();
+        const emailRegex = buildOrgEmailRegex(domain);
+        const users = await User.find({ email: emailRegex }).select("name email _id").lean();
         const userIds = users.map(user => user._id.toString());
 
         const userTasks = await Task.find()
             .populate({
                 path: 'assignedTo',
                 select: 'name email _id',
-                match: { email: { $regex: `@${domain}$`, $options: 'i' } }
+                match: { email: emailRegex }
             });
 
         const userTaskMap = {};
@@ -129,7 +129,7 @@ const exportUsersReport = async (req, res) => {
         return workbook.xlsx.write(res).then(() => res.status(200).end());
 
     } catch (error) {
-        res.status(500).json({ message: "Error exporting user tasks", error: error.message });
+        sendError(res, 'Error exporting user tasks', 500, error);
     }
 };
 

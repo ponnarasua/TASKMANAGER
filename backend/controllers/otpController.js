@@ -1,14 +1,11 @@
 const User = require('../models/User');
 const OTP = require('../models/OTP');
-const bcrypt = require('bcryptjs');
-const { USER_ROLES, HTTP_STATUS, PUBLIC_DOMAINS } = require('../utils/constants');
+const { USER_ROLES, HTTP_STATUS } = require('../utils/constants');
 const { generateOTP, generateOTPExpiry } = require('../utils/otpUtils');
 const { sendRegistrationOTP, sendPasswordResetOTP, sendAccountDeletionOTP } = require('../utils/emailService');
-
-// Helper function to get domain from email
-const getEmailDomain = (email) => {
-    return email.split('@')[1]?.toLowerCase();
-};
+const { getOrgDomain, isPublicDomain } = require('../utils/domainHelper');
+const { hashPassword, generateToken } = require('../utils/authHelper');
+const { sendError, sendNotFound, sendBadRequest, sendForbidden } = require('../utils/responseHelper');
 
 // @desc Send OTP for registration
 // @route POST /api/auth/send-registration-otp
@@ -18,17 +15,15 @@ const sendRegistrationOTPHandler = async (req, res) => {
         const { name, email, password, profileImageUrl, adminInviteToken } = req.body;
 
         // Check if email is from a public domain
-        const emailDomain = getEmailDomain(email);
-        if (PUBLIC_DOMAINS.includes(emailDomain)) {
-            return res.status(HTTP_STATUS.FORBIDDEN).json({ 
-                message: 'Registration is only allowed for private organization email addresses. Public email domains (Gmail, Yahoo, Outlook, etc.) are not permitted.' 
-            });
+        const emailDomain = getOrgDomain(email);
+        if (isPublicDomain(emailDomain)) {
+            return sendForbidden(res, 'Registration is only allowed for private organization email addresses. Public email domains (Gmail, Yahoo, Outlook, etc.) are not permitted.');
         }
 
         // Check if user already exists
         const userExists = await User.findOne({ email });
         if (userExists) {
-            return res.status(HTTP_STATUS.BAD_REQUEST).json({ message: 'User already exists with this email' });
+            return sendBadRequest(res, 'User already exists with this email');
         }
 
         // Validate admin invite token
@@ -57,8 +52,7 @@ const sendRegistrationOTPHandler = async (req, res) => {
         const expiresAt = generateOTPExpiry();
 
         // Hash password for storage
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
+        const hashedPassword = await hashPassword(password);
 
         // Store OTP with user data
         await OTP.create({
@@ -86,10 +80,7 @@ const sendRegistrationOTPHandler = async (req, res) => {
 
     } catch (error) {
         console.error('Error in sendRegistrationOTP:', error);
-        res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ 
-            message: 'Failed to send OTP. Please try again.',
-            error: error.message 
-        });
+        sendError(res, 'Failed to send OTP. Please try again.', 500, error);
     }
 };
 
@@ -108,25 +99,19 @@ const verifyRegistrationOTPHandler = async (req, res) => {
         }).sort({ createdAt: -1 });
 
         if (!otpRecord) {
-            return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
-                message: 'No OTP found. Please request a new OTP.' 
-            });
+            return sendBadRequest(res, 'No OTP found. Please request a new OTP.');
         }
 
         // Check if OTP is valid
         if (!otpRecord.isValid()) {
-            return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
-                message: 'OTP has expired or maximum attempts reached. Please request a new OTP.' 
-            });
+            return sendBadRequest(res, 'OTP has expired or maximum attempts reached. Please request a new OTP.');
         }
 
         // Verify OTP
         if (otpRecord.otp !== otp) {
             await otpRecord.incrementAttempts();
             const remainingAttempts = otpRecord.maxAttempts - otpRecord.attempts;
-            return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
-                message: `Invalid OTP. ${remainingAttempts} attempts remaining.` 
-            });
+            return sendBadRequest(res, `Invalid OTP. ${remainingAttempts} attempts remaining.`);
         }
 
         // Mark OTP as verified
@@ -143,11 +128,7 @@ const verifyRegistrationOTPHandler = async (req, res) => {
         await OTP.deleteMany({ email, type: 'registration' });
 
         // Generate token
-        const jwt = require('jsonwebtoken');
-        const { TOKEN_EXPIRY } = require('../utils/constants');
-        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-            expiresIn: TOKEN_EXPIRY,
-        });
+        const token = generateToken(user);
 
         res.status(HTTP_STATUS.CREATED).json({
             success: true,
@@ -165,10 +146,7 @@ const verifyRegistrationOTPHandler = async (req, res) => {
 
     } catch (error) {
         console.error('Error in verifyRegistrationOTP:', error);
-        res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ 
-            message: 'Failed to verify OTP. Please try again.',
-            error: error.message 
-        });
+        sendError(res, 'Failed to verify OTP. Please try again.', 500, error);
     }
 };
 
@@ -182,9 +160,7 @@ const forgotPasswordHandler = async (req, res) => {
         // Check if user exists
         const user = await User.findOne({ email });
         if (!user) {
-            return res.status(HTTP_STATUS.NOT_FOUND).json({ 
-                message: 'No account found with this email address' 
-            });
+            return sendNotFound(res, 'No account found with this email address');
         }
 
         // Delete any existing OTPs for this email and type
@@ -213,10 +189,7 @@ const forgotPasswordHandler = async (req, res) => {
 
     } catch (error) {
         console.error('Error in forgotPassword:', error);
-        res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ 
-            message: 'Failed to send OTP. Please try again.',
-            error: error.message 
-        });
+        sendError(res, 'Failed to send OTP. Please try again.', 500, error);
     }
 };
 
@@ -235,38 +208,29 @@ const resetPasswordHandler = async (req, res) => {
         }).sort({ createdAt: -1 });
 
         if (!otpRecord) {
-            return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
-                message: 'No OTP found. Please request a new OTP.' 
-            });
+            return sendBadRequest(res, 'No OTP found. Please request a new OTP.');
         }
 
         // Check if OTP is valid
         if (!otpRecord.isValid()) {
-            return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
-                message: 'OTP has expired or maximum attempts reached. Please request a new OTP.' 
-            });
+            return sendBadRequest(res, 'OTP has expired or maximum attempts reached. Please request a new OTP.');
         }
 
         // Verify OTP
         if (otpRecord.otp !== otp) {
             await otpRecord.incrementAttempts();
             const remainingAttempts = otpRecord.maxAttempts - otpRecord.attempts;
-            return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
-                message: `Invalid OTP. ${remainingAttempts} attempts remaining.` 
-            });
+            return sendBadRequest(res, `Invalid OTP. ${remainingAttempts} attempts remaining.`);
         }
 
         // Find user and update password
         const user = await User.findOne({ email });
         if (!user) {
-            return res.status(HTTP_STATUS.NOT_FOUND).json({ 
-                message: 'User not found' 
-            });
+            return sendNotFound(res, 'User');
         }
 
         // Hash new password
-        const salt = await bcrypt.genSalt(10);
-        user.password = await bcrypt.hash(newPassword, salt);
+        user.password = await hashPassword(newPassword);
         await user.save();
 
         // Mark OTP as verified and delete
@@ -279,10 +243,7 @@ const resetPasswordHandler = async (req, res) => {
 
     } catch (error) {
         console.error('Error in resetPassword:', error);
-        res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ 
-            message: 'Failed to reset password. Please try again.',
-            error: error.message 
-        });
+        sendError(res, 'Failed to reset password. Please try again.', 500, error);
     }
 };
 
@@ -293,9 +254,7 @@ const deleteAccountRequestHandler = async (req, res) => {
     try {
         const user = await User.findById(req.user._id);
         if (!user) {
-            return res.status(HTTP_STATUS.NOT_FOUND).json({ 
-                message: 'User not found' 
-            });
+            return sendNotFound(res, 'User');
         }
 
         // Delete any existing OTPs for this email and type
@@ -324,10 +283,7 @@ const deleteAccountRequestHandler = async (req, res) => {
 
     } catch (error) {
         console.error('Error in deleteAccountRequest:', error);
-        res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ 
-            message: 'Failed to send OTP. Please try again.',
-            error: error.message 
-        });
+        sendError(res, 'Failed to send OTP. Please try again.', 500, error);
     }
 };
 
@@ -340,9 +296,7 @@ const confirmDeleteAccountHandler = async (req, res) => {
         const user = await User.findById(req.user._id);
 
         if (!user) {
-            return res.status(HTTP_STATUS.NOT_FOUND).json({ 
-                message: 'User not found' 
-            });
+            return sendNotFound(res, 'User');
         }
 
         // Find OTP record
@@ -353,25 +307,19 @@ const confirmDeleteAccountHandler = async (req, res) => {
         }).sort({ createdAt: -1 });
 
         if (!otpRecord) {
-            return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
-                message: 'No OTP found. Please request a new OTP.' 
-            });
+            return sendBadRequest(res, 'No OTP found. Please request a new OTP.');
         }
 
         // Check if OTP is valid
         if (!otpRecord.isValid()) {
-            return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
-                message: 'OTP has expired or maximum attempts reached. Please request a new OTP.' 
-            });
+            return sendBadRequest(res, 'OTP has expired or maximum attempts reached. Please request a new OTP.');
         }
 
         // Verify OTP
         if (otpRecord.otp !== otp) {
             await otpRecord.incrementAttempts();
             const remainingAttempts = otpRecord.maxAttempts - otpRecord.attempts;
-            return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
-                message: `Invalid OTP. ${remainingAttempts} attempts remaining.` 
-            });
+            return sendBadRequest(res, `Invalid OTP. ${remainingAttempts} attempts remaining.`);
         }
 
         // Delete user's tasks
@@ -391,10 +339,7 @@ const confirmDeleteAccountHandler = async (req, res) => {
 
     } catch (error) {
         console.error('Error in confirmDeleteAccount:', error);
-        res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ 
-            message: 'Failed to delete account. Please try again.',
-            error: error.message 
-        });
+        sendError(res, 'Failed to delete account. Please try again.', 500, error);
     }
 };
 

@@ -1,19 +1,8 @@
 const User = require('../models/User');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const { USER_ROLES, TOKEN_EXPIRY, HTTP_STATUS, PUBLIC_DOMAINS } = require('../utils/constants');
-
-// Generate JWT token
-const generateToken = (userId) => {
-    return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
-        expiresIn: TOKEN_EXPIRY,
-    });
-};
-
-// Helper function to get domain from email
-const getEmailDomain = (email) => {
-    return email.split('@')[1]?.toLowerCase();
-};
+const { USER_ROLES, HTTP_STATUS } = require('../utils/constants');
+const { generateToken, hashPassword, comparePassword } = require('../utils/authHelper');
+const { getOrgDomain, isPublicDomain } = require('../utils/domainHelper');
+const { sendError, sendNotFound } = require('../utils/responseHelper');
 
 // @desc Register a new user
 // @route POST /api/auth/register
@@ -23,8 +12,8 @@ const registerUser = async (req , res) => {
         let { name, email, password , profileImageUrl, adminInviteToken } = req.body;
 
         // Check if email is from a public domain
-        const emailDomain = getEmailDomain(email);
-        if (PUBLIC_DOMAINS.includes(emailDomain)) {
+        const emailDomain = getOrgDomain(email);
+        if (isPublicDomain(emailDomain)) {
             return res.status(HTTP_STATUS.FORBIDDEN).json({ 
                 message: 'Registration is only allowed for private organization email addresses. Public email domains (Gmail, Yahoo, Outlook, etc.) are not permitted.' 
             });
@@ -53,9 +42,9 @@ const registerUser = async (req , res) => {
         }
         // If no token provided, role remains as MEMBER
 
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
+        const hashedPassword = await hashPassword(password);
 
+        // Strip Cloudinary base URL if present
         profileImageUrl = profileImageUrl?.replace(/^https:\/\/res\.cloudinary\.com\/dqhu7vgbc\/image\/upload\//, '');
 
         const user = await User.create({
@@ -72,10 +61,10 @@ const registerUser = async (req , res) => {
             email: user.email,
             profileImageUrl: user.profileImageUrl,
             role: user.role,
-            token: generateToken(user._id),
+            token: generateToken(user),
         });
     } catch (error) {
-        res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ message: 'Server error', error: error.message });
+        sendError(res, 'Server error', HTTP_STATUS.INTERNAL_SERVER_ERROR, error);
     }
 };
 
@@ -93,7 +82,7 @@ const loginUser = async (req , res)=>{
         }
 
         // Check password
-        const isMatch = await bcrypt.compare(password, user.password);
+        const isMatch = await comparePassword(password, user.password);
         if(!isMatch){
             return res.status(401).json({message: 'Wrong password'});
         }
@@ -105,10 +94,10 @@ const loginUser = async (req , res)=>{
             email: user.email,
             profileImageUrl: user.profileImageUrl,
             role: user.role,
-            token: generateToken(user._id),
+            token: generateToken(user),
         });
     } catch(error){
-        res.status(500).json({message: 'Server error', error: error.message});
+        sendError(res, 'Server error', 500, error);
     }
 };
 
@@ -120,11 +109,11 @@ const getUserProfile = async (req , res)=>{
     try{
         const user = await User.findById(req.user.id).select('-password');
         if(!user){
-            return res.status(404).json({message: 'User not found'});
+            return sendNotFound(res, 'User');
         }
         res.json(user);
     } catch(error){
-        res.status(500).json({message: 'Server error', error: error.message});
+        sendError(res, 'Server error', 500, error);
     }
 };
 
@@ -135,33 +124,29 @@ const updateUserProfile = async (req , res)=>{
     try{
        const user = await User.findById(req.user.id);
         if(!user){
-            return res.status(404).json({message: 'User not found'});
+            return sendNotFound(res, 'User');
         }
 
         user.name = req.body.name || user.name;
         user.email = req.body.email || user.email;
 
-
         if(req.body.password){
-            const salt = await bcrypt.genSalt(10);
-            user.password = await bcrypt.hash(req.body.password, salt);
+            user.password = await hashPassword(req.body.password);
         }
 
         const updatedUser = await user.save();
 
-        
         res.json({
             _id: updatedUser._id,
             name: updatedUser.name,
             email: updatedUser.email,
             profileImageUrl: updatedUser.profileImageUrl,
             role: updatedUser.role,
-            token: generateToken(updatedUser._id),
+            token: generateToken(updatedUser),
         });
     } catch(error){
-        res.status(500).json({message: 'Server error', error: error.message});
+        sendError(res, 'Server error', 500, error);
     }
-
 };
 
 module.exports = {registerUser,loginUser,getUserProfile,updateUserProfile};

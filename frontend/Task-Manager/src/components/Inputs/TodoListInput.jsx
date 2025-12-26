@@ -21,8 +21,8 @@ const TodoListInput = ({todoList, setTodoList}) => {
     return (
     <div>
         {todoList.map((item, index) => (
-            <div key={item} className='flex justify-between bg-gray-50 border border-gray-100 px-3 py-2 rounded-md mb-3 mt-2'>
-                <p className='text-sm text-black'>
+            <div key={item} className='flex justify-between bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 px-3 py-2 rounded-md mb-3 mt-2'>
+                <p className='text-sm text-gray-900 dark:text-white'>
                     <span className='text-xs text-gray-400 font-semibold mr-2'>
                         {index<9 ? `0${index+1}` : index+1}
                     </span>
@@ -41,7 +41,7 @@ const TodoListInput = ({todoList, setTodoList}) => {
                 placeholder='Enter Task'
                 value={option}
                 onChange={({target}) => setOption(target.value)}
-                className='w-full text-[13px] text-black outline-none bg-white border border-gray-100 px-3 py-2 rounded-md'
+                className='w-full text-[13px] text-gray-900 dark:text-white outline-none bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 px-3 py-2 rounded-md placeholder:text-gray-500 dark:placeholder:text-gray-400'
             />
             <button className='card-btn text-nowrap' onClick={handleAddOption}>
                 <HiMiniPlus className='text-lg'/> Add

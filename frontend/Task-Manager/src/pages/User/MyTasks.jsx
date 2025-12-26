@@ -91,7 +91,7 @@ const MyTasks = () => {
     <DashboardLayout activeMenu="My Tasks">
       <div className="my-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between">
-          <h2 className="text-xl font-medium">My Tasks</h2>
+          <h2 className="text-xl font-medium text-gray-900 dark:text-white">My Tasks</h2>
           {tabs && tabs.length > 0 && (
             <TaskStatusTabs
               tabs={tabs}
@@ -104,7 +104,7 @@ const MyTasks = () => {
         {/* Priority Filter and Sort */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-4">
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600">Filter & Sort:</span>
+            <span className="text-sm text-gray-600 dark:text-gray-400">Filter & Sort:</span>
             <PriorityFilter
               selectedPriority={priorityFilter}
               onPriorityChange={setPriorityFilter}
@@ -112,7 +112,7 @@ const MyTasks = () => {
               onSortOrderChange={setSortOrder}
             />
           </div>
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-gray-500 dark:text-gray-400">
             Showing {filteredAndSortedTasks.length} of {allTasks.length} tasks
           </div>
         </div>
@@ -134,21 +134,23 @@ const MyTasks = () => {
                 attachmentCount={item.attachments?.length || 0}
                 completedTodoCount={item.completedCount || 0}
                 todoChecklist={item.todoChecklist || []}
+                labels={item.labels || []}
+                reminderSent={item.reminderSent}
                 onClick={() => handleClick(item._id)}          
                 />
               ))}
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="bg-gray-50 rounded-full p-6 mb-4">
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-full p-6 mb-4">
                 <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                 </svg>
               </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
                 No {filterStatus === 'All' ? '' : filterStatus.toLowerCase()} tasks found
               </h3>
-              <p className="text-gray-500 max-w-md">
+              <p className="text-gray-500 dark:text-gray-400 max-w-md">
                 {filterStatus === 'All' 
                   ? "You don't have any tasks assigned yet. Tasks will appear here once they are created and assigned to you."
                   : `You don't have any ${filterStatus.toLowerCase()} tasks. Try switching to a different filter to see your other tasks.`

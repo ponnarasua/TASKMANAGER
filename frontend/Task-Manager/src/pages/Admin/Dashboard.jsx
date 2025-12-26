@@ -12,8 +12,7 @@ import { LuArrowRight } from 'react-icons/lu';
 import TaskListTable from '../../components/TaskListTable';
 import CustomPieChart from '../../components/Charts/CustomPieChart';
 import CustomBarChart from '../../components/Charts/CustomBarChart';
-
-const COLORS = ["#8D51FF","#00B8DB","#7BCE00"];
+import { CHART_COLORS } from '../../utils/colors';
 
 const Dashboard = () => {
   useUserAuth();
@@ -79,7 +78,7 @@ const Dashboard = () => {
       <div className='card my-5'>
         <div>
           <div className='col-span-3'>
-            <h2 className='text-xl md:text-2xl'>Good Morning! {user?.name}</h2>
+            <h2 className='text-xl md:text-2xl text-gray-900 dark:text-white'>Good Morning! {user?.name}</h2>
             <p className='text-xs md:text-[13px] text-gray-400 mt-1.5'>
               {moment().format('dddd Do MMM YYYY')}
             </p>
@@ -127,11 +126,11 @@ const Dashboard = () => {
         <div>
           <div className='card'>
             <div className='flex items-center justify-between'>
-              <h5 className='text-lg'>Task Distribution</h5>
+              <h5 className='text-lg text-gray-900 dark:text-white'>Task Distribution</h5>
             </div>
             <CustomPieChart 
               data={pieChartData}
-              colors={COLORS}
+              colors={CHART_COLORS}
             />
           </div>
         </div>
@@ -139,7 +138,7 @@ const Dashboard = () => {
         <div>
           <div className='card'>
             <div className='flex items-center justify-between'>
-              <h5 className='text-lg'>Task Priority Levels</h5>
+              <h5 className='text-lg text-gray-900 dark:text-white'>Task Priority Levels</h5>
             </div>
             <CustomBarChart 
               data={barChartData}
@@ -150,7 +149,7 @@ const Dashboard = () => {
         <div className='md:col-span-2'>
           <div className='card'>
             <div className='flex items-center justify-between'>
-              <h5 className='text-lg'>Recent Tasks</h5>
+              <h5 className='text-lg text-gray-900 dark:text-white'>Recent Tasks</h5>
 
               <button className='card-btn' onClick={onSeeMore}>
                 See All <LuArrowRight className='text-base'/>

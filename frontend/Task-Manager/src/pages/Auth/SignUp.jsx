@@ -162,8 +162,8 @@ const SignUp = () => {
   return (
     <AuthLayout>
       <div className='lg:w-[100%] h-auto md:h-full mt-10 md:mt-0 flex flex-col justify-center'>
-        <h3 className='text-xl font-semibold text-bold'>Create an Account</h3>
-        <p className='text-xs text-slate-700 mt-[5px] mb-6'>Join us today by entering your details below.</p>
+        <h3 className='text-xl font-semibold text-gray-900 dark:text-white'>Create an Account</h3>
+        <p className='text-xs text-slate-700 dark:text-gray-400 mt-[5px] mb-6'>Join us today by entering your details below.</p>
 
         {!showOtpInput ? (
           <form onSubmit={handleSignUp}>
@@ -210,8 +210,8 @@ const SignUp = () => {
               {isLoading ? 'SENDING OTP...' : 'SEND OTP'}
             </button>
 
-            <div className='mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg'>
-              <p className='text-xs text-slate-700'>
+            <div className='mt-3 p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg'>
+              <p className='text-xs text-slate-700 dark:text-gray-400'>
                 <span className='font-semibold'>Need an Admin Token?</span><br />
                 If you need an admin invite token for your organization, please{' '}
                 <a 

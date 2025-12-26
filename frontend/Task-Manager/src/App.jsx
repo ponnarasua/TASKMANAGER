@@ -1,34 +1,53 @@
-import React, { useContext } from 'react';
+import React, { useContext, Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes ,Route, Outlet, Navigate } from "react-router-dom";
-// Auth Pages
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './lib/queryClient';
+
+// Auth Pages - loaded immediately (small, needed first)
 import Login from './pages/Auth/Login';
 import SignUp from './pages/Auth/SignUp';
 import ForgotPassword from './pages/Auth/ForgotPassword';
-// Admin Pages
-import Dashboard from './pages/Admin/Dashboard';
-import ManageTasks from './pages/Admin/ManageTasks';
-import CreateTasks from './pages/Admin/CreateTasks';
-import ManageUsers from './pages/Admin/ManageUsers';
-import AdminSettings from './pages/Admin/AdminSettings';
-// User Pages
-import UserDashboard from './pages/User/UserDashboard';
-import MyTasks from './pages/User/MyTasks';
-import ViewTaskDetails from './pages/User/ViewTaskDetails';
-import UserSettings from './pages/User/UserSettings';
+
+// Lazy loaded Admin Pages
+const Dashboard = lazy(() => import('./pages/Admin/Dashboard'));
+const ManageTasks = lazy(() => import('./pages/Admin/ManageTasks'));
+const CreateTasks = lazy(() => import('./pages/Admin/CreateTasks'));
+const ManageUsers = lazy(() => import('./pages/Admin/ManageUsers'));
+const AdminSettings = lazy(() => import('./pages/Admin/AdminSettings'));
+
+// Lazy loaded User Pages
+const UserDashboard = lazy(() => import('./pages/User/UserDashboard'));
+const MyTasks = lazy(() => import('./pages/User/MyTasks'));
+const ViewTaskDetails = lazy(() => import('./pages/User/ViewTaskDetails'));
+const UserSettings = lazy(() => import('./pages/User/UserSettings'));
 
 import PrivateRoute from './routes/PrivateRoute';
 import UserProvider, {UserContext} from './context/userContext';
+import ThemeProvider from './context/themeContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Toaster } from 'react-hot-toast';
+
+// Loading fallback component
+const PageLoader = () => (
+  <div className="flex items-center justify-center min-h-screen bg-white dark:bg-gray-900">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto"></div>
+      <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">Loading...</p>
+    </div>
+  </div>
+);
 
 
 const App = () => {
   return (
     <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+    <ThemeProvider>
     <UserProvider>
 
     <div>
       <Router>
+        <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<SignUp />} />
@@ -41,6 +60,7 @@ const App = () => {
             <Route path="/admin/create-tasks/:taskId?" element={<CreateTasks />} />
             <Route path="/admin/users" element={<ManageUsers />} />
             <Route path="/admin/settings" element={<AdminSettings />} />
+            <Route path="/admin/task-details/:id" element={<ViewTaskDetails />} />
           </Route>
 
           {/* User Routes */}
@@ -54,6 +74,7 @@ const App = () => {
           {/* Default Route */}
           <Route path="/" element={<Root />} />
         </Routes>
+        </Suspense>
       </Router>
     </div>
     <Toaster 
@@ -65,6 +86,8 @@ const App = () => {
       }}
     />
     </UserProvider>
+    </ThemeProvider>
+    </QueryClientProvider>
     </ErrorBoundary>
   )
 }

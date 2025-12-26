@@ -20,14 +20,14 @@ const AuthLayout = ({ children }) => {
   }, []);
 
   return (
-    <div className='flex h-screen'>
+    <div className='flex h-screen bg-white dark:bg-gray-950'>
       <div className={`px-6 pt-8 pb-12 ${showImage ? 'w-full md:w-[60%]' : 'w-full'}`}>
-        <h2 className='text-lg font-medium text-black'>Task Manager</h2>
+        <h2 className='text-lg font-medium text-gray-900 dark:text-white'>Task Manager</h2>
         {children}
       </div>
 
       {showImage && (
-        <div className='flex w-[40%] h-screen items-center justify-center bg-blue-50 bg-[url("/bg-img.png")] bg-cover bg-no-repeat bg-center p-8'>
+        <div className='flex w-[40%] h-screen items-center justify-center bg-blue-50 dark:bg-gray-900 bg-[url("/bg-img.png")] bg-cover bg-no-repeat bg-center p-8'>
           <img src={UI_IMG} className='w-64 lg:w-[90%]' />
         </div>
       )}

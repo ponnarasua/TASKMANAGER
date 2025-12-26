@@ -21,9 +21,9 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6">
-            <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 rounded-full">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+          <div className="max-w-md w-full bg-white dark:bg-gray-800 shadow-lg rounded-lg p-6">
+            <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 dark:bg-red-900/30 rounded-full">
               <svg
                 className="w-6 h-6 text-red-600"
                 fill="none"
@@ -38,18 +38,18 @@ class ErrorBoundary extends React.Component {
                 />
               </svg>
             </div>
-            <h1 className="mt-4 text-xl font-semibold text-center text-gray-900">
+            <h1 className="mt-4 text-xl font-semibold text-center text-gray-900 dark:text-white">
               Something went wrong
             </h1>
-            <p className="mt-2 text-sm text-center text-gray-600">
+            <p className="mt-2 text-sm text-center text-gray-600 dark:text-gray-400">
               We're sorry for the inconvenience. Please try refreshing the page.
             </p>
             {process.env.NODE_ENV === 'development' && this.state.error && (
               <details className="mt-4 text-xs">
-                <summary className="cursor-pointer text-gray-700 font-medium">
+                <summary className="cursor-pointer text-gray-700 dark:text-gray-300 font-medium">
                   Error Details
                 </summary>
-                <pre className="mt-2 p-2 bg-gray-100 rounded overflow-auto text-red-600">
+                <pre className="mt-2 p-2 bg-gray-100 dark:bg-gray-900 rounded overflow-auto text-red-600 dark:text-red-400">
                   {this.state.error.toString()}
                   {this.state.errorInfo && this.state.errorInfo.componentStack}
                 </pre>
@@ -64,7 +64,7 @@ class ErrorBoundary extends React.Component {
               </button>
               <button
                 onClick={() => (window.location.href = '/')}
-                className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition"
+                className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition"
               >
                 Go Home
               </button>

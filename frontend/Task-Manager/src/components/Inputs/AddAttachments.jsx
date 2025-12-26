@@ -24,10 +24,10 @@ const AddAttachments = ({attachments, setAttachments}) => {
         {attachments.map((item, index) => (
                 <div 
                     key={item} 
-                    className='flex justify-between bg-gray-50 border border-gray-100 px-3 py-2 rounded-md mb-3 mt-2'>
-                    <div className='flex-1 flex items-center gap-2 border border-gray-100'>
+                    className='flex justify-between bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 px-3 py-2 rounded-md mb-3 mt-2'>
+                    <div className='flex-1 flex items-center gap-2 border border-gray-100 dark:border-gray-700'>
                         <LuPaperclip className='text-gray-400'/>
-                        <p className='text-xs text-black'>{item}</p>
+                        <p className='text-xs text-gray-900 dark:text-white'>{item}</p>
                     </div>
 
                     <button 
@@ -40,7 +40,7 @@ const AddAttachments = ({attachments, setAttachments}) => {
         }
 
         <div className='flex items-center gap-5 mt-4'>
-            <div className='flexs-1 flex items-center gap-3 border border-gray-100 rounded-md px-3'>
+            <div className='flexs-1 flex items-center gap-3 border border-gray-100 dark:border-gray-700 rounded-md px-3 bg-white dark:bg-gray-800'>
                 <LuPaperclip className='text-gray-400'/>
 
                 <input
@@ -48,7 +48,7 @@ const AddAttachments = ({attachments, setAttachments}) => {
                     placeholder='Add File Link'
                     value={option}
                     onChange={({target}) => setOption(target.value)}
-                    className='w-full text-[13px] text-black outline-none bg-white py-2'
+                    className='w-full text-[13px] text-gray-900 dark:text-white outline-none bg-white dark:bg-gray-800 py-2 placeholder:text-gray-500 dark:placeholder:text-gray-400'
                 />
             </div>
 

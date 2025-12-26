@@ -1,6 +1,22 @@
 const Task = require('../models/Task');
-const PUBLIC_DOMAINS = ['gmail.com', 'yahoo.com', 'outlook.com'];
-const getOrgDomain = (email) => email.split('@')[1];
+const User = require('../models/User');
+const { sendMentionNotification } = require('../utils/emailService');
+const { triggerReminderCheck } = require('../utils/reminderScheduler');
+const { createNotification } = require('./notificationController');
+const { getOrgDomain, isPublicDomain, getFrontendUrl, buildTaskUrl } = require('../utils/domainHelper');
+const { sendError, sendNotFound, sendForbidden, sendBadRequest } = require('../utils/responseHelper');
+const { isAdmin } = require('../utils/authHelper');
+
+// Helper function to add activity log
+const addActivityLog = (task, userId, action, details = '', oldValue = '', newValue = '') => {
+    task.activityLog.push({
+        user: userId,
+        action,
+        details,
+        oldValue,
+        newValue
+    });
+};
 
 
 // @desc   Get all tasks (Admin: all, User: only assigned tasks)
@@ -8,42 +24,70 @@ const getOrgDomain = (email) => email.split('@')[1];
 // @access Private
 const getTasks = async (req, res) => {
   try {
-    const { status } = req.query;
+    const { status, page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+    
+    // Pagination
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit))); // Max 100 items per page
+    const skip = (pageNum - 1) * limitNum;
+    
+    // Sorting
+    const sortOptions = {};
+    sortOptions[sortBy] = sortOrder === 'asc' ? 1 : -1;
+    
     let filter = {};
     if (status) filter.status = status;
 
     let tasks;
+    let totalTasks;
 
-    if (req.user.role === 'admin') {
+    if (isAdmin(req.user)) {
       const domain = getOrgDomain(req.user.email);
-      if (PUBLIC_DOMAINS.includes(domain)) {
-        return res.status(403).json({ message: 'Admin access restricted for public domains.' });
+      if (isPublicDomain(domain)) {
+        return sendForbidden(res, 'Admin access restricted for public domains.');
       }
+
+      // Get total count for pagination
+      totalTasks = await Task.countDocuments(filter);
 
       tasks = await Task.find(filter)
         .populate({
           path: 'assignedTo',
           select: 'name email profileImageUrl',
           match: { email: { $regex: `@${domain}$`, $options: 'i' } },
-        });
+        })
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limitNum)
+        .lean(); // Use lean() for better performance
 
       tasks = tasks.filter(task => task.assignedTo); // remove non-org tasks
     } else {
+      // Get total count for pagination
+      totalTasks = await Task.countDocuments({ ...filter, assignedTo: req.user._id });
+
       tasks = await Task.find({ ...filter, assignedTo: req.user._id })
-        .populate("assignedTo", "name email profileImageUrl");
+        .populate("assignedTo", "name email profileImageUrl")
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limitNum)
+        .lean(); // Use lean() for better performance
     }
 
     // Add completed checklist count
-    tasks = await Promise.all(tasks.map(async (task) => {
-      const completedCount = task.todoChecklist.filter(item => item.completed).length;
-      return { ...task._doc, completedCount };
-    }));
+    tasks = tasks.map((task) => {
+      const completedCount = task.todoChecklist?.filter(item => item.completed).length || 0;
+      return { ...task, completedCount };
+    });
 
     const filteredTasks = tasks; // after domain filtering
 
     const pendingTasks = filteredTasks.filter(t => t.status === 'Pending').length;
     const inProgressTasks = filteredTasks.filter(t => t.status === 'In Progress').length;
     const completedTasks = filteredTasks.filter(t => t.status === 'Completed').length;
+
+    // Pagination metadata
+    const totalPages = Math.ceil(totalTasks / limitNum);
 
     res.json({
       tasks: filteredTasks,
@@ -52,11 +96,19 @@ const getTasks = async (req, res) => {
         pendingTasks,
         inProgressTasks,
         completedTasks,
+      },
+      pagination: {
+        currentPage: pageNum,
+        totalPages,
+        totalItems: totalTasks,
+        itemsPerPage: limitNum,
+        hasNextPage: pageNum < totalPages,
+        hasPrevPage: pageNum > 1,
       }
     });
 
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    sendError(res, 'Server error', 500, error);
   }
 };
 
@@ -67,27 +119,27 @@ const getTaskById = async (req, res) => {
   try {
     const task = await Task.findById(req.params.id).populate("assignedTo", "name email profileImageUrl");
 
-    if (!task) return res.status(404).json({ message: "Task not found" });
+    if (!task) return sendNotFound(res, 'Task');
 
     console.log('Current User:', req.user);
     console.log('Task Assigned To:', task.assignedTo);
 
-    if (req.user.role === 'admin') {
+    if (isAdmin(req.user)) {
       const domain = getOrgDomain(req.user.email);
       if (
-        PUBLIC_DOMAINS.includes(domain) ||
+        isPublicDomain(domain) ||
         !task.assignedTo?.some(user => user.email.endsWith(`@${domain}`))
       ) {
-        return res.status(403).json({ message: "Unauthorized for this task" });
+        return sendForbidden(res, 'Unauthorized for this task');
       }
     } else if (!task.assignedTo.some(user => user._id.equals(req.user._id))) {
-      return res.status(403).json({ message: "Unauthorized" });
+      return sendForbidden(res, 'Unauthorized');
     }
 
     res.json(task);
   } catch (error) {
     console.error('❌ Error in getTaskById:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    sendError(res, 'Server error', 500, error);
   }
 };
 
@@ -97,19 +149,19 @@ const getTaskById = async (req, res) => {
 // @access Private (Admin only)
 const createTask = async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ message: 'Only admins can create tasks.' });
+    if (!isAdmin(req.user)) {
+      return sendForbidden(res, 'Only admins can create tasks.');
     }
 
     const domain = getOrgDomain(req.user.email);
-    if (PUBLIC_DOMAINS.includes(domain)) {
-      return res.status(403).json({ message: 'Admins from public domains cannot assign tasks.' });
+    if (isPublicDomain(domain)) {
+      return sendForbidden(res, 'Admins from public domains cannot assign tasks.');
     }
 
-    const { title, description, priority, dueDate, assignedTo, attachments, todoChecklist } = req.body;
+    const { title, description, priority, dueDate, assignedTo, attachments, todoChecklist, labels } = req.body;
 
     if (!Array.isArray(assignedTo)) {
-      return res.status(400).json({ message: 'assignedTo must be an array of user IDs' });
+      return sendBadRequest(res, 'assignedTo must be an array of user IDs');
     }
 
     const users = await require('../models/User').find({ _id: { $in: assignedTo } });
@@ -117,7 +169,7 @@ const createTask = async (req, res) => {
     // Check if all assigned users belong to the same domain
     const invalidUsers = users.filter(u => !u.email.endsWith(`@${domain}`));
     if (invalidUsers.length > 0) {
-      return res.status(400).json({ message: 'One or more users do not belong to your organization' });
+      return sendBadRequest(res, 'One or more users do not belong to your organization');
     }
 
     const task = await Task.create({
@@ -128,12 +180,32 @@ const createTask = async (req, res) => {
       assignedTo,
       createdBy: req.user._id,
       todoChecklist,
-      attachments
+      attachments,
+      labels: labels || []
     });
+
+    // Add activity log for task creation
+    addActivityLog(task, req.user._id, 'created', `Task "${title}" was created`);
+    await task.save();
+
+    // Create notifications for assigned users
+    const assigner = await User.findById(req.user._id).select('name');
+    for (const userId of assignedTo) {
+        if (userId.toString() !== req.user._id.toString()) {
+            createNotification({
+                recipient: userId,
+                type: 'task_assigned',
+                title: 'New Task Assigned',
+                message: `${assigner.name} assigned you to "${title}"`,
+                task: task._id,
+                sender: req.user._id
+            });
+        }
+    }
 
     res.status(201).json({ message: 'Task created successfully', task });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    sendError(res, 'Server error', 500, error);
   }
 };
 
@@ -144,7 +216,20 @@ const updateTask = async (req, res) => {
     try {
         const task = await Task.findById(req.params.id);
 
-        if (!task) return res.status(404).json({ message: "Task not Found" });
+        if (!task) return sendNotFound(res, 'Task');
+
+        // Track changes for activity log
+        const changes = [];
+        
+        if (req.body.title && req.body.title !== task.title) {
+            changes.push({ field: 'title', old: task.title, new: req.body.title });
+        }
+        if (req.body.priority && req.body.priority !== task.priority) {
+            addActivityLog(task, req.user._id, 'priority_changed', 'Priority was changed', task.priority, req.body.priority);
+        }
+        if (req.body.status && req.body.status !== task.status) {
+            addActivityLog(task, req.user._id, 'status_changed', 'Status was changed', task.status, req.body.status);
+        }
 
         task.title = req.body.title || task.title;
         task.description = req.body.description || task.description;
@@ -153,17 +238,27 @@ const updateTask = async (req, res) => {
         task.todoChecklist = req.body.todoChecklist || task.todoChecklist;
         task.attachments = req.body.attachments || task.attachments;
 
+        // Handle labels update
+        if (req.body.labels !== undefined) {
+            task.labels = req.body.labels;
+        }
+
         if (req.body.assignedTo) {
             if (!Array.isArray(req.body.assignedTo)) {
-                return res.status(400).json({ message: "assignedTo must be an array" });
+                return sendBadRequest(res, 'assignedTo must be an array');
             }
+            addActivityLog(task, req.user._id, 'assigned', 'Task assignment was updated');
             task.assignedTo = req.body.assignedTo;
+        }
+
+        if (changes.length > 0) {
+            addActivityLog(task, req.user._id, 'updated', 'Task was updated');
         }
 
         const updatedTask = await task.save();
         res.json({ message: 'Task updated successfully', updatedTask });
     } catch (error) {
-        res.status(500).json({ message: 'Server error', error: error.message });
+        sendError(res, 'Server error', 500, error);
     }
 };
 
@@ -174,13 +269,13 @@ const deleteTask = async (req, res) => {
     try{
         const task = await Task.findById(req.params.id);
 
-        if (!task) return res.status(404).json({ message: "Task not Found" });
+        if (!task) return sendNotFound(res, 'Task');
 
         await task.deleteOne();
         res.json({ message: 'Task deleted successfully' });
 
     }catch (error) {
-        res.status(500).json({ message: 'Server error', error: error.message });
+        sendError(res, 'Server error', 500, error);
     }
 };
 
@@ -190,15 +285,21 @@ const deleteTask = async (req, res) => {
 const updateTaskStatus = async (req, res) => {
     try {
         const task = await Task.findById(req.params.id);
-        if (!task) return res.status(404).json({ message: "Task not Found" });
+        if (!task) return sendNotFound(res, 'Task');
 
         const isAssigned = task.assignedTo?.toString() === req.user._id.toString();
 
-        if (!isAssigned && req.user.role !== 'admin') {
-            return res.status(403).json({ message: "You are not authorized to update this task" });
+        if (!isAssigned && !isAdmin(req.user)) {
+            return sendForbidden(res, 'You are not authorized to update this task');
         }
 
+        const oldStatus = task.status;
         task.status = req.body.status || task.status;
+
+        // Log status change
+        if (oldStatus !== task.status) {
+            addActivityLog(task, req.user._id, 'status_changed', 'Status was changed', oldStatus, task.status);
+        }
 
         if (task.status === 'Completed') {
             task.todoChecklist.forEach((item) => (item.completed = true));
@@ -209,7 +310,7 @@ const updateTaskStatus = async (req, res) => {
 
         res.json({ message: 'Task updated successfully', updatedTask });
     } catch (error) {
-        res.status(500).json({ message: 'Server error', error: error.message });
+        sendError(res, 'Server error', 500, error);
     }
 };
 
@@ -223,10 +324,10 @@ const updateTaskChecklist = async (req, res) => {
         const { todoChecklist } = req.body;
         const task = await Task.findById(req.params.id);
 
-        if (!task) return res.status(404).json({ message: "Task not Found" });
+        if (!task) return sendNotFound(res, 'Task');
 
-        if(!task.assignedTo.includes(req.user._id) && req.user.role !== 'admin'){
-            return res.status(403).json({ message: "You are not authorized to update this task" });
+        if(!task.assignedTo.includes(req.user._id) && !isAdmin(req.user)){
+            return sendForbidden(res, 'You are not authorized to update this task');
         }   
         task.todoChecklist = todoChecklist ;
 
@@ -254,7 +355,7 @@ const updateTaskChecklist = async (req, res) => {
 
         res.json({message : "Task checklist updated", task : updatedTask});
     }catch (error) {
-        res.status(500).json({ message: 'Server error', error: error.message });
+        sendError(res, 'Server error', 500, error);
     }
 };
 
@@ -264,8 +365,8 @@ const updateTaskChecklist = async (req, res) => {
 const getDashboardData = async (req, res) => {
   try {
     const domain = getOrgDomain(req.user.email);
-    if (req.user.role !== 'admin' || PUBLIC_DOMAINS.includes(domain)) {
-      return res.status(403).json({ message: 'Unauthorized to access dashboard data' });
+    if (!isAdmin(req.user) || isPublicDomain(domain)) {
+      return sendForbidden(res, 'Unauthorized to access dashboard data');
     }
 
     const tasks = await Task.find()
@@ -321,7 +422,7 @@ const getDashboardData = async (req, res) => {
     });
 
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    sendError(res, 'Server error', 500, error);
   }
 };
 
@@ -388,7 +489,294 @@ const getUserDashboardData = async (req, res) => {
             recentTasks,
         });
     }catch (error) {
-        res.status(500).json({ message: 'Server error', error: error.message });
+        sendError(res, 'Server error', 500, error);
+    }
+};
+
+// @desc   Add a comment to a task
+// @route  POST /api/tasks/:id/comments
+// @access Private
+const addComment = async (req, res) => {
+    try {
+        const { text, mentions = [] } = req.body;
+        const task = await Task.findById(req.params.id);
+
+        if (!task) return sendNotFound(res, 'Task');
+
+        // Check authorization
+        const isAssigned = task.assignedTo.some(id => id.equals(req.user._id));
+        if (!isAssigned && !isAdmin(req.user)) {
+            return sendForbidden(res, 'You are not authorized to comment on this task');
+        }
+
+        if (!text || text.trim() === '') {
+            return sendBadRequest(res, 'Comment text is required');
+        }
+
+        const comment = {
+            user: req.user._id,
+            text: text.trim(),
+            mentions: mentions // Array of user IDs
+        };
+
+        task.comments.push(comment);
+        addActivityLog(task, req.user._id, 'comment_added', 'A comment was added');
+
+        await task.save();
+
+        // Send notification emails to mentioned users (async, don't wait)
+        if (mentions.length > 0) {
+            const mentionedUsers = await User.find({ _id: { $in: mentions } }).select('name email');
+            const commenter = await User.findById(req.user._id).select('name');
+            
+            mentionedUsers.forEach(mentionedUser => {
+                // Don't notify yourself
+                if (mentionedUser._id.toString() !== req.user._id.toString()) {
+                    // Create in-app notification
+                    createNotification({
+                        recipient: mentionedUser._id,
+                        type: 'mention',
+                        title: 'You were mentioned in a comment',
+                        message: `${commenter.name} mentioned you in a comment on "${task.title}"`,
+                        task: task._id,
+                        sender: req.user._id
+                    });
+
+                    // Send email notification
+                    sendMentionNotification(
+                        mentionedUser.email,
+                        mentionedUser.name,
+                        commenter.name,
+                        task.title,
+                        text.trim(),
+                        buildTaskUrl(task._id)
+                    ).catch(err => console.error('Error sending mention notification:', err));
+                }
+            });
+        }
+
+        // Populate the user info for the response
+        const updatedTask = await Task.findById(req.params.id)
+            .populate('comments.user', 'name email profileImageUrl')
+            .populate('comments.mentions', 'name email profileImageUrl')
+            .populate('activityLog.user', 'name email profileImageUrl');
+
+        res.status(201).json({ 
+            message: 'Comment added successfully', 
+            comments: updatedTask.comments 
+        });
+    } catch (error) {
+        sendError(res, 'Server error', 500, error);
+    }
+};
+
+// @desc   Get comments for a task
+// @route  GET /api/tasks/:id/comments
+// @access Private
+const getComments = async (req, res) => {
+    try {
+        const task = await Task.findById(req.params.id)
+            .populate('comments.user', 'name email profileImageUrl')
+            .populate('comments.mentions', 'name email profileImageUrl');
+
+        if (!task) return sendNotFound(res, 'Task');
+
+        res.json({ comments: task.comments });
+    } catch (error) {
+        sendError(res, 'Server error', 500, error);
+    }
+};
+
+// @desc   Delete a comment from a task
+// @route  DELETE /api/tasks/:id/comments/:commentId
+// @access Private
+const deleteComment = async (req, res) => {
+    try {
+        const task = await Task.findById(req.params.id);
+
+        if (!task) return sendNotFound(res, 'Task');
+
+        const comment = task.comments.id(req.params.commentId);
+
+        if (!comment) return sendNotFound(res, 'Comment');
+
+        // Only the comment author or admin can delete
+        if (!comment.user.equals(req.user._id) && !isAdmin(req.user)) {
+            return sendForbidden(res, 'You can only delete your own comments');
+        }
+
+        task.comments.pull(req.params.commentId);
+        await task.save();
+
+        res.json({ message: 'Comment deleted successfully' });
+    } catch (error) {
+        sendError(res, 'Server error', 500, error);
+    }
+};
+
+// @desc   Get activity log for a task
+// @route  GET /api/tasks/:id/activity
+// @access Private
+const getActivityLog = async (req, res) => {
+    try {
+        const task = await Task.findById(req.params.id)
+            .populate('activityLog.user', 'name email profileImageUrl');
+
+        if (!task) return sendNotFound(res, 'Task');
+
+        res.json({ activityLog: task.activityLog });
+    } catch (error) {
+        sendError(res, 'Server error', 500, error);
+    }
+};
+
+// @desc   Add labels to a task
+// @route  POST /api/tasks/:id/labels
+// @access Private (Admin only)
+const addLabels = async (req, res) => {
+    try {
+        const { labels } = req.body;
+        const task = await Task.findById(req.params.id);
+
+        if (!task) return sendNotFound(res, 'Task');
+
+        if (!Array.isArray(labels)) {
+            return sendBadRequest(res, 'Labels must be an array');
+        }
+
+        // Add new labels without duplicates
+        const newLabels = labels.filter(label => !task.labels.includes(label.trim()));
+        task.labels.push(...newLabels.map(l => l.trim()));
+
+        if (newLabels.length > 0) {
+            addActivityLog(task, req.user._id, 'label_added', `Labels added: ${newLabels.join(', ')}`);
+        }
+
+        await task.save();
+
+        res.json({ message: 'Labels added successfully', labels: task.labels });
+    } catch (error) {
+        sendError(res, 'Server error', 500, error);
+    }
+};
+
+// @desc   Remove a label from a task
+// @route  DELETE /api/tasks/:id/labels/:label
+// @access Private (Admin only)
+const removeLabel = async (req, res) => {
+    try {
+        const task = await Task.findById(req.params.id);
+        const labelToRemove = decodeURIComponent(req.params.label);
+
+        if (!task) return sendNotFound(res, 'Task');
+
+        const labelIndex = task.labels.indexOf(labelToRemove);
+        if (labelIndex === -1) {
+            return sendNotFound(res, 'Label');
+        }
+
+        task.labels.splice(labelIndex, 1);
+        addActivityLog(task, req.user._id, 'label_removed', `Label removed: ${labelToRemove}`);
+
+        await task.save();
+
+        res.json({ message: 'Label removed successfully', labels: task.labels });
+    } catch (error) {
+        sendError(res, 'Server error', 500, error);
+    }
+};
+
+// @desc   Get all unique labels used in tasks
+// @route  GET /api/tasks/labels/all
+// @access Private
+const getAllLabels = async (req, res) => {
+    try {
+        const labels = await Task.distinct('labels');
+        res.json({ labels: labels.filter(l => l) }); // Filter out null/empty
+    } catch (error) {
+        sendError(res, 'Server error', 500, error);
+    }
+};
+
+// @desc   Manually trigger due date reminder check (Admin only)
+// @route  POST /api/tasks/reminders/trigger
+// @access Private (Admin)
+const triggerReminders = async (req, res) => {
+    try {
+        if (!isAdmin(req.user)) {
+            return sendForbidden(res, 'Access denied. Admin only.');
+        }
+
+        const result = await triggerReminderCheck();
+        res.json({
+            message: 'Reminder check triggered successfully',
+            result
+        });
+    } catch (error) {
+        sendError(res, 'Server error', 500, error);
+    }
+};
+
+// @desc   Send reminder for a specific task
+// @route  POST /api/tasks/:id/send-reminder
+// @access Private (Admin)
+const sendTaskReminder = async (req, res) => {
+    try {
+        if (!isAdmin(req.user)) {
+            return sendForbidden(res, 'Access denied. Admin only.');
+        }
+
+        const task = await Task.findById(req.params.id).populate('assignedTo', 'name email');
+        
+        if (!task) {
+            return sendNotFound(res, 'Task');
+        }
+
+        if (task.status === 'Completed') {
+            return sendBadRequest(res, 'Cannot send reminder for completed task');
+        }
+
+        const { sendDueDateReminder } = require('../utils/emailService');
+        const Notification = require('../models/Notification');
+        
+        let sentCount = 0;
+        const taskUrl = buildTaskUrl(task._id);
+
+        for (const user of task.assignedTo) {
+            if (!user.email) continue;
+
+            try {
+                // Create in-app notification
+                await Notification.create({
+                    recipient: user._id,
+                    type: 'reminder',
+                    title: 'Task Reminder',
+                    message: `Reminder: "${task.title}" needs your attention!`,
+                    task: task._id,
+                    sender: req.user._id
+                });
+
+                // Send email
+                await sendDueDateReminder(
+                    user.email,
+                    user.name,
+                    task.title,
+                    task.dueDate,
+                    task.priority,
+                    taskUrl
+                );
+                sentCount++;
+            } catch (error) {
+                console.error(`Failed to send reminder to ${user.email}:`, error.message);
+            }
+        }
+
+        res.json({
+            message: `Reminder sent to ${sentCount} user(s)`,
+            sentCount
+        });
+    } catch (error) {
+        sendError(res, 'Server error', 500, error);
     }
 };
 
@@ -402,4 +790,13 @@ module.exports = {
     updateTaskChecklist,
     getDashboardData,
     getUserDashboardData,
+    addComment,
+    getComments,
+    deleteComment,
+    getActivityLog,
+    addLabels,
+    removeLabel,
+    getAllLabels,
+    triggerReminders,
+    sendTaskReminder,
 };

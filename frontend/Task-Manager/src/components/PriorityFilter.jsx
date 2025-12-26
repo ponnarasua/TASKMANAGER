@@ -23,7 +23,7 @@ const PriorityFilter = ({ selectedPriority, onPriorityChange, sortOrder, onSortO
         <select
           value={selectedPriority}
           onChange={(e) => onPriorityChange(e.target.value)}
-          className='appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-8 text-sm font-medium text-gray-700 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary cursor-pointer'
+          className='appearance-none bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-4 py-2 pr-8 text-sm font-medium text-gray-700 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-600 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary cursor-pointer'
         >
           {priorityOptions.map(option => (
             <option key={option.value} value={option.value}>
@@ -39,7 +39,7 @@ const PriorityFilter = ({ selectedPriority, onPriorityChange, sortOrder, onSortO
         <select
           value={sortOrder}
           onChange={(e) => onSortOrderChange(e.target.value)}
-          className='appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-8 text-sm font-medium text-gray-700 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary cursor-pointer'
+          className='appearance-none bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-4 py-2 pr-8 text-sm font-medium text-gray-700 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-600 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary cursor-pointer'
         >
           {sortOptions.map(option => (
             <option key={option.value} value={option.value}>

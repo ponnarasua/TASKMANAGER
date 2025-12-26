@@ -34,7 +34,7 @@ const ProfilePhotoSelector = ({ image, setImage }) => {
             className='hidden'
         />
         {!image ? (
-            <div className='w-20 h-20 flex items-center justify-center bg-blue-100/50 rounded-full relative cursor-pointer'> 
+            <div className='w-20 h-20 flex items-center justify-center bg-blue-100/50 dark:bg-blue-900/30 rounded-full relative cursor-pointer'> 
                 <LuUser className='text-4xl text-primary'/>
                 <button
                     type='button'

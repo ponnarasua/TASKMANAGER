@@ -123,8 +123,8 @@ const ForgotPassword = () => {
   return (
     <AuthLayout>
       <div className='lg:w-[80%] h-auto md:h-full mt-10 md:mt-0 flex flex-col justify-center'>
-        <h3 className='text-xl font-semibold text-bold'>Reset Your Password</h3>
-        <p className='text-xs text-slate-700 mt-[5px] mb-6'>
+        <h3 className='text-xl font-semibold text-gray-900 dark:text-white'>Reset Your Password</h3>
+        <p className='text-xs text-slate-700 dark:text-gray-400 mt-[5px] mb-6'>
           {step === 1 
             ? 'Enter your email address to receive an OTP' 
             : 'Enter the OTP sent to your email and create a new password'}
@@ -148,7 +148,7 @@ const ForgotPassword = () => {
               {isLoading ? 'SENDING OTP...' : 'SEND OTP'}
             </button>
 
-            <p className='text-[13px] text-slate-700 mt-3'>
+            <p className='text-[13px] text-slate-700 dark:text-gray-400 mt-3'>
               Remember your password?{" "}
               <Link className='font-medium text-primary underline' to='/login'>
                 Log In
@@ -158,8 +158,8 @@ const ForgotPassword = () => {
         ) : (
           <form onSubmit={handleResetPassword}>
             <div className='mb-4'>
-              <p className='text-sm text-slate-600 mb-4'>
-                We've sent a 6-digit OTP to <strong>{email}</strong>
+              <p className='text-sm text-slate-600 dark:text-gray-400 mb-4'>
+                We've sent a 6-digit OTP to <strong className='text-gray-900 dark:text-white'>{email}</strong>
               </p>
               <Input
                 value={otp}
@@ -217,14 +217,14 @@ const ForgotPassword = () => {
                   setError('');
                   setSuccessMessage('');
                 }}
-                className='text-sm text-slate-600 underline'
+                className='text-sm text-slate-600 dark:text-gray-400 underline'
                 disabled={isLoading}
               >
                 Change Email
               </button>
             </div>
 
-            <p className='text-[13px] text-slate-700'>
+            <p className='text-[13px] text-slate-700 dark:text-gray-400'>
               Remember your password?{" "}
               <Link className='font-medium text-primary underline' to='/login'>
                 Log In

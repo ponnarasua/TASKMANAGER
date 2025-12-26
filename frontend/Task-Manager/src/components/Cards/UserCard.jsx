@@ -1,6 +1,18 @@
 import React from 'react'
 import User from '../../assets/images/User.png'
 
+// Simple status colors for stat cards (without borders for cleaner look)
+const getStatColor = (status) => {
+    switch(status) {
+        case "In Progress":
+            return "text-cyan-500 bg-cyan-50/50 dark:bg-cyan-900/20";
+        case "Completed":
+            return "text-lime-500 bg-lime-50/50 dark:bg-lime-900/20";
+        default:
+            return "text-violet-500 bg-violet-50/50 dark:bg-violet-900/20";
+    }
+};
+
 const UserCard = ({userInfo}) => {
 
   return (
@@ -9,12 +21,12 @@ const UserCard = ({userInfo}) => {
             <div className='flex items-center gap-3'>
                 <img 
                     src={userInfo?.profileImageUrl || User}
-                    className='w-12 h-12 rounded-full border border-white'
+                    className='w-12 h-12 rounded-full border border-white dark:border-gray-700'
                 />
                 
                 <div>
-                    <p className='text-sm font-medium'>{userInfo?.name}</p>
-                    <p className='text-xs text-gray-500'>{userInfo?.email}</p>
+                    <p className='text-sm font-medium text-gray-900 dark:text-white'>{userInfo?.name}</p>
+                    <p className='text-xs text-gray-500 dark:text-gray-400'>{userInfo?.email}</p>
                 </div>
             </div>
         </div>
@@ -44,23 +56,9 @@ const UserCard = ({userInfo}) => {
 export default UserCard ; 
 
 const StatCard = ({label, count, status}) => {
-
-    const getStatusTagColor = () => {
-        switch(status) {
-            case "In Progress":
-                return "text-cyan-500 bg-gray-50";
-            case "Completed":
-                return "text-indigo-500 bg-gray-50";
-            default:
-                return "text-violet-500 bg-gray-50";
-        }
-    };
-
     return (
-        <div className={`flex-1 text-[10px] font-medium ${getStatusTagColor()} px-4 py-0.5 rounded`}>
+        <div className={`flex-1 text-[10px] font-medium ${getStatColor(status)} px-4 py-0.5 rounded`}>
             <span className='text-[12px] font-semibold'>{count}</span><br/>{label}
-
-
         </div>
     )
 };

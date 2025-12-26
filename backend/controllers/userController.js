@@ -1,7 +1,8 @@
 const Task = require('../models/Task');
 const User = require('../models/User');
-const bcrypt = require('bcryptjs');
-const { getDomain, isPublicDomain } = require('../utils/emailUtils');
+const { getOrgDomain, isPublicDomain } = require('../utils/domainHelper');
+const { sendError, sendNotFound, sendForbidden } = require('../utils/responseHelper');
+const { isAdmin } = require('../utils/authHelper');
 
 // @desc Get all users (Admin only)
 // @route GET /api/users/
@@ -9,13 +10,11 @@ const { getDomain, isPublicDomain } = require('../utils/emailUtils');
 async function getUsers(req, res) {
     try {
         const adminEmail = req.user.email;
-        const domain = getDomain(adminEmail);
+        const domain = getOrgDomain(adminEmail);
 
         // Deny access if domain is public
         if (isPublicDomain(domain)) {
-            return res.status(403).json({
-                message: "Access denied. Admins using public domains like Gmail cannot access users.",
-            });
+            return sendForbidden(res, 'Access denied. Admins using public domains like Gmail cannot access users.');
         }
 
         // Get only users with the same domain
@@ -41,7 +40,7 @@ async function getUsers(req, res) {
         res.json(usersWithTaskCounts);
 
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        sendError(res, 'Server error', 500, error);
     }
 }
 
@@ -51,10 +50,10 @@ async function getUsers(req, res) {
 const getUserById = async (req, res) => {
     try {
         const user =  await User.findById(req.params.id).select("-password");
-        if (!user)  return res.status(404).json({ message: "User not found" });
+        if (!user)  return sendNotFound(res, 'User');
         res.json(user);
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        sendError(res, 'Server error', 500, error);
     }
 };
 
@@ -69,12 +68,12 @@ const updateUser = async (req, res) => {
         // Check if user exists
         const user = await User.findById(userId);
         if (!user) {
-            return res.status(404).json({ message: "User not found" });
+            return sendNotFound(res, 'User');
         }
 
         // Only allow users to update their own profile (or admins can update any)
-        if (req.user._id.toString() !== userId && req.user.role !== 'admin') {
-            return res.status(403).json({ message: "Not authorized to update this profile" });
+        if (req.user._id.toString() !== userId && !isAdmin(req.user)) {
+            return sendForbidden(res, 'Not authorized to update this profile');
         }
 
         // Update fields if provided
@@ -89,19 +88,71 @@ const updateUser = async (req, res) => {
 
     } catch (error) {
         console.error('Update user error:', error);
-        res.status(500).json({ message: "Server error", error: error.message });
+        sendError(res, 'Server error', 500, error);
     }
 };
 
-// // @desc Delete a user (Admin only)
-// // @route DELETE /api/:id
-// // @access Private (Admin)
-// const deleteUser = async (req, res) => {
-//     try {
+// @desc Search users for @mentions
+// @route GET /api/users/search
+// @access Private
+const searchUsers = async (req, res) => {
+    try {
+        const { q, taskId } = req.query;
+        const searchTerm = q?.trim() || '';
 
-//     } catch (error) {
-//         res.status(500).json({ message: "Server error", error: error.message });
-//     }
-// };
+        const userEmail = req.user.email;
+        const domain = getOrgDomain(userEmail);
 
-module.exports = { getUsers, getUserById, updateUser };
+        // Build search query
+        let searchFilter = {
+            _id: { $ne: req.user._id }, // Exclude current user
+        };
+
+        // For non-public domains, restrict to same domain
+        if (!isPublicDomain(domain)) {
+            searchFilter.email = { $regex: `@${domain}$`, $options: 'i' };
+        }
+
+        // Add name search if query provided
+        if (searchTerm) {
+            searchFilter.name = { $regex: searchTerm, $options: 'i' };
+        }
+
+        // If taskId provided, prioritize users assigned to that task
+        let users = [];
+        if (taskId) {
+            const Task = require('../models/Task');
+            const task = await Task.findById(taskId).populate('assignedTo', 'name email profileImageUrl');
+            
+            if (task && task.assignedTo) {
+                // Get assigned users that match the search
+                const assignedUsers = task.assignedTo.filter(u => 
+                    u._id.toString() !== req.user._id.toString() &&
+                    (!searchTerm || u.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                );
+
+                // Get other users
+                const otherUsers = await User.find({
+                    ...searchFilter,
+                    _id: { $nin: [...task.assignedTo.map(u => u._id), req.user._id] }
+                })
+                .select('name email profileImageUrl')
+                .limit(10 - assignedUsers.length);
+
+                users = [...assignedUsers, ...otherUsers];
+            }
+        } else {
+            users = await User.find(searchFilter)
+                .select('name email profileImageUrl')
+                .limit(10);
+        }
+
+        res.json(users);
+
+    } catch (error) {
+        console.error('Search users error:', error);
+        sendError(res, 'Server error', 500, error);
+    }
+};
+
+module.exports = { getUsers, getUserById, updateUser, searchUsers };
