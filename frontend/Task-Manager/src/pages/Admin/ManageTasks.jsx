@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { useNavigate } from 'react-router-dom';
 import axiosInstance from '../../utils/axiosInstance';
 import { API_PATHS } from '../../utils/apiPaths';
-import { LuFileSpreadsheet, LuPlus } from 'react-icons/lu';
+import { LuFileSpreadsheet, LuPlus, LuFileText } from 'react-icons/lu';
 import TaskStatusTabs from '../../components/TaskStatusTabs';
 import TaskCard from '../../components/Cards/TaskCard';
 import PriorityFilter from '../../components/PriorityFilter';
+import TaskSearchBar from '../../components/TaskSearchBar';
 import toast from 'react-hot-toast';
 
 const ManageTasks = () => {
@@ -16,8 +17,21 @@ const ManageTasks = () => {
   const [priorityFilter, setPriorityFilter] = useState("All");
   const [sortOrder, setSortOrder] = useState("desc");
   const [filteredAndSortedTasks, setFilteredAndSortedTasks] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isSearchMode, setIsSearchMode] = useState(false);
 
   const navigate = useNavigate();
+
+  // Fetch users for assignee filter
+  const fetchUsers = async () => {
+    try {
+      const response = await axiosInstance.get(API_PATHS.USERS.GET_ALL_USERS);
+      setUsers(response.data || []);
+    } catch (error) {
+      console.error("Error fetching users", error);
+    }
+  };
 
   const getAllTasks = async () => {
     try {
@@ -52,7 +66,7 @@ const ManageTasks = () => {
   };
 
   // Filter and sort tasks based on priority and sort order
-  const filterAndSortTasks = () => {
+  const filterAndSortTasks = useCallback(() => {
     let filtered = [...allTasks];
 
     // Filter by priority
@@ -62,26 +76,33 @@ const ManageTasks = () => {
 
     // Sort tasks
     filtered.sort((a, b) => {
+      const priorityOrderHigh = { "High": 3, "Medium": 2, "Low": 1 };
+      const priorityOrderLow = { "High": 1, "Medium": 2, "Low": 3 };
+      
       switch (sortOrder) {
         case "desc":
-          // High > Medium > Low
-          const priorityOrder = { "High": 3, "Medium": 2, "Low": 1 };
-          return (priorityOrder[b.priority] || 0) - (priorityOrder[a.priority] || 0);
+          return (priorityOrderHigh[b.priority] || 0) - (priorityOrderHigh[a.priority] || 0);
         case "asc":
-          // Low > Medium > High
-          const priorityOrderAsc = { "High": 1, "Medium": 2, "Low": 3 };
-          return (priorityOrderAsc[b.priority] || 0) - (priorityOrderAsc[a.priority] || 0);
+          return (priorityOrderLow[b.priority] || 0) - (priorityOrderLow[a.priority] || 0);
+        case "dueSoon":
+          const dateA = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+          const dateB = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+          return dateA - dateB;
+        case "dueLate":
+          const dateA2 = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+          const dateB2 = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+          return dateB2 - dateA2;
         case "newest":
-          return new Date(b.createdAt) - new Date(a.createdAt);
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
         case "oldest":
-          return new Date(a.createdAt) - new Date(b.createdAt);
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
         default:
           return 0;
       }
     });
 
     setFilteredAndSortedTasks(filtered);
-  };
+  }, [allTasks, priorityFilter, sortOrder]);
 
   // download task report
   const handleDownloadReport = async () => {
@@ -105,24 +126,93 @@ const ManageTasks = () => {
     }
   };
 
-  useEffect(() => {
+  // Duplicate task handler
+  const handleDuplicateTask = async (taskId) => {
+    try {
+      const response = await axiosInstance.post(API_PATHS.TASKS.DUPLICATE_TASK(taskId));
+      toast.success("Task duplicated successfully!");
+      getAllTasks(); // Refresh the task list
+    } catch (error) {
+      console.error("Error duplicating task", error);
+      toast.error(error.response?.data?.message || "Failed to duplicate task");
+    }
+  };
+
+  // download PDF report
+  const handleDownloadPDF = async () => {
+    try {
+      const response = await axiosInstance.get(API_PATHS.REPORTS.EXPORT_TASKS_PDF, {
+        responseType: 'blob',
+      });
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'task_report.pdf');
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success("PDF downloaded successfully!");
+    } catch (error) {
+      console.error("Error downloading PDF", error);
+      toast.error("Failed to download PDF report");
+    }
+  };
+
+  // Search handler
+  const handleSearch = async (query, filters) => {
+    setIsSearching(true);
+    setIsSearchMode(true);
+    
+    try {
+      const params = { q: query };
+      if (filters.status) params.status = filters.status;
+      if (filters.priority) params.priority = filters.priority;
+      if (filters.assignee) params.assignee = filters.assignee;
+      if (filters.dueDateFrom) params.dueDateFrom = filters.dueDateFrom;
+      if (filters.dueDateTo) params.dueDateTo = filters.dueDateTo;
+
+      const response = await axiosInstance.get(API_PATHS.TASKS.SEARCH_TASKS, { params });
+      setAllTasks(response.data?.tasks || []);
+    } catch (error) {
+      console.error("Error searching tasks", error);
+      toast.error("Search failed. Please try again.");
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Clear search and restore normal view
+  const handleClearSearch = () => {
+    setIsSearchMode(false);
     getAllTasks();
-  }, [filterStatus]);
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  useEffect(() => {
+    if (!isSearchMode) {
+      getAllTasks();
+    }
+  }, [filterStatus, isSearchMode]);
 
   useEffect(() => {
     filterAndSortTasks();
-  }, [allTasks, priorityFilter, sortOrder]);
+  }, [filterAndSortTasks]);
 
   return (
     <DashboardLayout activeMenu="Manage Tasks">
       <div className="my-5">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-center justify-between gap-5">
             <h2 className="text-xl font-medium text-gray-900 dark:text-white">Manage Tasks</h2>
           </div>
 
           <div className="flex items-center gap-3">
-            {tabs && tabs.length > 0 && (
+            {!isSearchMode && tabs && tabs.length > 0 && (
               <TaskStatusTabs
                 tabs={tabs}
                 activeTab={filterStatus}
@@ -131,9 +221,25 @@ const ManageTasks = () => {
             )}
             <button className="hidden lg:flex download-btn" onClick={() => handleDownloadReport()}>
               <LuFileSpreadsheet className="text-lg" />
-              Download Report
+              Excel
+            </button>
+            <button className="hidden lg:flex download-btn" onClick={() => handleDownloadPDF()}>
+              <LuFileText className="text-lg" />
+              PDF
             </button>
           </div>
+        </div>
+
+        {/* Search Bar */}
+        <div className="mt-4">
+          <TaskSearchBar
+            onSearch={handleSearch}
+            onClear={handleClearSearch}
+            placeholder="Search tasks by title or description..."
+            users={users}
+            isLoading={isSearching}
+            showFilters={true}
+          />
         </div>
 
         {/* Priority Filter and Sort */}
@@ -148,7 +254,14 @@ const ManageTasks = () => {
             />
           </div>
           <div className="text-sm text-gray-500 dark:text-gray-400">
-            Showing {filteredAndSortedTasks.length} of {allTasks.length} tasks
+            {isSearchMode ? (
+              <span className="flex items-center gap-2">
+                <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">Search</span>
+                Found {filteredAndSortedTasks.length} tasks
+              </span>
+            ) : (
+              `Showing ${filteredAndSortedTasks.length} of ${allTasks.length} tasks`
+            )}
           </div>
         </div>
 
@@ -158,6 +271,7 @@ const ManageTasks = () => {
               {filteredAndSortedTasks.map((item) => (
                 <TaskCard
                 key={item._id}
+                taskId={item._id}
                 title={item.title}
                 description={item.description}
                 priority={item.priority}
@@ -171,7 +285,9 @@ const ManageTasks = () => {
                 todoChecklist={item.todoChecklist || []}
                 labels={item.labels || []}
                 reminderSent={item.reminderSent}
-                onClick={() => handleClick(item)}          
+                onClick={() => handleClick(item)}
+                onDuplicate={() => handleDuplicateTask(item._id)}
+                isAdmin={true}
                 />
               ))}
             </div>

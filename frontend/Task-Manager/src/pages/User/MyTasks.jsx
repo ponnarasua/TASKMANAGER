@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { useNavigate } from 'react-router-dom';
 import axiosInstance from '../../utils/axiosInstance';
@@ -7,6 +7,7 @@ import { LuFileSpreadsheet } from 'react-icons/lu';
 import TaskStatusTabs from '../../components/TaskStatusTabs';
 import TaskCard from '../../components/Cards/TaskCard';
 import PriorityFilter from '../../components/PriorityFilter';
+import TaskSearchBar from '../../components/TaskSearchBar';
 import toast from 'react-hot-toast';
 
 const MyTasks = () => {
@@ -16,6 +17,8 @@ const MyTasks = () => {
   const [priorityFilter, setPriorityFilter] = useState("All");
   const [sortOrder, setSortOrder] = useState("desc");
   const [filteredAndSortedTasks, setFilteredAndSortedTasks] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isSearchMode, setIsSearchMode] = useState(false);
 
   const navigate = useNavigate();
 
@@ -48,7 +51,7 @@ const MyTasks = () => {
   };
 
   // Filter and sort tasks based on priority and sort order
-  const filterAndSortTasks = () => {
+  const filterAndSortTasks = useCallback(() => {
     let filtered = [...allTasks];
 
     // Filter by priority
@@ -67,38 +70,88 @@ const MyTasks = () => {
           // Low > Medium > High
           const priorityOrderAsc = { "High": 1, "Medium": 2, "Low": 3 };
           return (priorityOrderAsc[b.priority] || 0) - (priorityOrderAsc[a.priority] || 0);
+        case "dueSoon":
+          const dateA = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+          const dateB = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+          return dateA - dateB;
+        case "dueLate":
+          const dateA2 = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+          const dateB2 = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+          return dateB2 - dateA2;
         case "newest":
-          return new Date(b.createdAt) - new Date(a.createdAt);
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
         case "oldest":
-          return new Date(a.createdAt) - new Date(b.createdAt);
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
         default:
           return 0;
       }
     });
 
     setFilteredAndSortedTasks(filtered);
+  }, [allTasks, priorityFilter, sortOrder]);
+
+  // Search handler
+  const handleSearch = async (query, filters) => {
+    setIsSearching(true);
+    setIsSearchMode(true);
+    
+    try {
+      const params = { q: query };
+      if (filters.status) params.status = filters.status;
+      if (filters.priority) params.priority = filters.priority;
+      if (filters.dueDateFrom) params.dueDateFrom = filters.dueDateFrom;
+      if (filters.dueDateTo) params.dueDateTo = filters.dueDateTo;
+
+      const response = await axiosInstance.get(API_PATHS.TASKS.SEARCH_TASKS, { params });
+      setAllTasks(response.data?.tasks || []);
+    } catch (error) {
+      console.error("Error searching tasks", error);
+      toast.error("Search failed. Please try again.");
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Clear search and restore normal view
+  const handleClearSearch = () => {
+    setIsSearchMode(false);
+    getAllTasks();
   };
 
   useEffect(() => {
-    getAllTasks();
-  }, [filterStatus]);
+    if (!isSearchMode) {
+      getAllTasks();
+    }
+  }, [filterStatus, isSearchMode]);
 
   useEffect(() => {
     filterAndSortTasks();
-  }, [allTasks, priorityFilter, sortOrder]);
+  }, [filterAndSortTasks]);
 
   return (
     <DashboardLayout activeMenu="My Tasks">
       <div className="my-5">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <h2 className="text-xl font-medium text-gray-900 dark:text-white">My Tasks</h2>
-          {tabs && tabs.length > 0 && (
+          {!isSearchMode && tabs && tabs.length > 0 && (
             <TaskStatusTabs
               tabs={tabs}
               activeTab={filterStatus}
               setActiveTab={setFilterStatus}
             />
           )}
+        </div>
+
+        {/* Search Bar */}
+        <div className="mt-4">
+          <TaskSearchBar
+            onSearch={handleSearch}
+            onClear={handleClearSearch}
+            placeholder="Search your tasks..."
+            isLoading={isSearching}
+            showFilters={true}
+            users={[]} // Users don't see assignee filter for their own tasks
+          />
         </div>
 
         {/* Priority Filter and Sort */}
@@ -113,7 +166,14 @@ const MyTasks = () => {
             />
           </div>
           <div className="text-sm text-gray-500 dark:text-gray-400">
-            Showing {filteredAndSortedTasks.length} of {allTasks.length} tasks
+            {isSearchMode ? (
+              <span className="flex items-center gap-2">
+                <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">Search</span>
+                Found {filteredAndSortedTasks.length} tasks
+              </span>
+            ) : (
+              `Showing ${filteredAndSortedTasks.length} of ${allTasks.length} tasks`
+            )}
           </div>
         </div>
 

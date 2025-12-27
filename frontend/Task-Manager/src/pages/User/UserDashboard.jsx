@@ -12,6 +12,7 @@ import { LuArrowRight } from 'react-icons/lu';
 import TaskListTable from '../../components/TaskListTable';
 import CustomPieChart from '../../components/Charts/CustomPieChart';
 import CustomBarChart from '../../components/Charts/CustomBarChart';
+import ProductivityStats from '../../components/ProductivityStats';
 import { CHART_COLORS } from '../../utils/colors';
 
 const UserDashboard = () => {
@@ -144,6 +145,11 @@ const UserDashboard = () => {
               data={barChartData}
             />
           </div>
+        </div>
+
+        {/* Productivity Stats Section */}
+        <div className='md:col-span-2'>
+          <ProductivityStats />
         </div>
 
         <div className='md:col-span-2'>

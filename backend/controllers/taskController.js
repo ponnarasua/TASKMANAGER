@@ -112,6 +112,124 @@ const getTasks = async (req, res) => {
   }
 };
 
+// @desc   Search tasks with filters
+// @route  GET /api/tasks/search
+// @access Private
+const searchTasks = async (req, res) => {
+  try {
+    const { 
+      q = '',           // Search query (title, description)
+      status,           // Filter by status
+      priority,         // Filter by priority
+      assignee,         // Filter by assignee ID
+      dueDateFrom,      // Filter by due date range start
+      dueDateTo,        // Filter by due date range end
+      page = 1, 
+      limit = 20 
+    } = req.query;
+
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+    const skip = (pageNum - 1) * limitNum;
+
+    // Build filter object
+    let filter = {};
+
+    // Text search on title and description
+    if (q && q.trim()) {
+      const searchRegex = new RegExp(q.trim(), 'i');
+      filter.$or = [
+        { title: searchRegex },
+        { description: searchRegex }
+      ];
+    }
+
+    // Status filter
+    if (status && ['Pending', 'In Progress', 'Completed'].includes(status)) {
+      filter.status = status;
+    }
+
+    // Priority filter
+    if (priority && ['Low', 'Medium', 'High'].includes(priority)) {
+      filter.priority = priority;
+    }
+
+    // Due date range filter
+    if (dueDateFrom || dueDateTo) {
+      filter.dueDate = {};
+      if (dueDateFrom) filter.dueDate.$gte = new Date(dueDateFrom);
+      if (dueDateTo) filter.dueDate.$lte = new Date(dueDateTo);
+    }
+
+    // Assignee filter
+    if (assignee) {
+      filter.assignedTo = assignee;
+    }
+
+    let tasks;
+    let totalTasks;
+
+    if (isAdmin(req.user)) {
+      const domain = getOrgDomain(req.user.email);
+      if (isPublicDomain(domain)) {
+        return sendForbidden(res, 'Admin access restricted for public domains.');
+      }
+
+      totalTasks = await Task.countDocuments(filter);
+
+      tasks = await Task.find(filter)
+        .populate({
+          path: 'assignedTo',
+          select: 'name email profileImageUrl',
+          match: { email: { $regex: `@${domain}$`, $options: 'i' } },
+        })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean();
+
+      tasks = tasks.filter(task => task.assignedTo && task.assignedTo.length > 0);
+    } else {
+      // Non-admin can only search their own tasks
+      filter.assignedTo = req.user._id;
+      
+      totalTasks = await Task.countDocuments(filter);
+
+      tasks = await Task.find(filter)
+        .populate('assignedTo', 'name email profileImageUrl')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean();
+    }
+
+    // Add completed checklist count
+    tasks = tasks.map((task) => {
+      const completedCount = task.todoChecklist?.filter(item => item.completed).length || 0;
+      return { ...task, completedCount };
+    });
+
+    const totalPages = Math.ceil(totalTasks / limitNum);
+
+    res.json({
+      tasks,
+      query: q,
+      filters: { status, priority, assignee, dueDateFrom, dueDateTo },
+      pagination: {
+        currentPage: pageNum,
+        totalPages,
+        totalItems: totalTasks,
+        itemsPerPage: limitNum,
+        hasNextPage: pageNum < totalPages,
+        hasPrevPage: pageNum > 1,
+      }
+    });
+
+  } catch (error) {
+    sendError(res, 'Server error', 500, error);
+  }
+};
+
 // @desc   Get task by ID
 // @route  GET /api/tasks/:id
 // @access Private
@@ -780,8 +898,391 @@ const sendTaskReminder = async (req, res) => {
     }
 };
 
+// @desc   Duplicate a task (Admin only)
+// @route  POST /api/tasks/:id/duplicate
+// @access Private (Admin only)
+const duplicateTask = async (req, res) => {
+    try {
+        if (!isAdmin(req.user)) {
+            return sendForbidden(res, 'Only admins can duplicate tasks.');
+        }
+
+        const originalTask = await Task.findById(req.params.id);
+        if (!originalTask) return sendNotFound(res, 'Task');
+
+        const domain = getOrgDomain(req.user.email);
+        if (isPublicDomain(domain)) {
+            return sendForbidden(res, 'Admins from public domains cannot duplicate tasks.');
+        }
+
+        // Create new due date (7 days from now)
+        const newDueDate = new Date();
+        newDueDate.setDate(newDueDate.getDate() + 7);
+
+        // Duplicate the task with reset status and checklist
+        const duplicatedTask = await Task.create({
+            title: `${originalTask.title} (Copy)`,
+            description: originalTask.description,
+            priority: originalTask.priority,
+            dueDate: newDueDate,
+            assignedTo: originalTask.assignedTo,
+            createdBy: req.user._id,
+            todoChecklist: originalTask.todoChecklist?.map(item => ({
+                text: item.text,
+                completed: false // Reset checklist items
+            })) || [],
+            attachments: [], // Don't copy attachments
+            labels: originalTask.labels || [],
+            status: 'Pending', // Reset status
+            progress: 0, // Reset progress
+            reminderSent: false
+        });
+
+        // Add activity log for task creation
+        addActivityLog(duplicatedTask, req.user._id, 'created', `Task duplicated from "${originalTask.title}"`);
+        await duplicatedTask.save();
+
+        res.status(201).json({ 
+            message: 'Task duplicated successfully', 
+            task: duplicatedTask 
+        });
+    } catch (error) {
+        sendError(res, 'Server error', 500, error);
+    }
+};
+
+// @desc   Get user productivity statistics
+// @route  GET /api/tasks/productivity-stats
+// @access Private
+const getProductivityStats = async (req, res) => {
+    try {
+        const { period = '30', userId: targetUserId } = req.query; // Days to analyze (7, 14, 30, 90)
+        
+        // If targetUserId is provided and user is admin, get stats for that user
+        // Otherwise get stats for the current user
+        let userId = req.user._id;
+        if (targetUserId && isAdmin(req.user)) {
+            userId = targetUserId;
+        }
+        const daysToAnalyze = parseInt(period) || 30;
+        
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - daysToAnalyze);
+        startDate.setHours(0, 0, 0, 0);
+
+        // Get all user's tasks
+        const allTasks = await Task.find({ assignedTo: userId }).lean();
+        
+        // Get tasks completed in the period
+        const completedInPeriod = allTasks.filter(task => 
+            task.status === 'Completed' && 
+            task.updatedAt >= startDate
+        );
+
+        // Get tasks created in the period
+        const createdInPeriod = allTasks.filter(task => 
+            task.createdAt >= startDate
+        );
+
+        // Calculate weekly breakdown for the period
+        const weeklyData = [];
+        const weeksToShow = Math.ceil(daysToAnalyze / 7);
+        
+        for (let i = 0; i < weeksToShow; i++) {
+            const weekStart = new Date();
+            weekStart.setDate(weekStart.getDate() - ((i + 1) * 7));
+            weekStart.setHours(0, 0, 0, 0);
+            
+            const weekEnd = new Date();
+            weekEnd.setDate(weekEnd.getDate() - (i * 7));
+            weekEnd.setHours(23, 59, 59, 999);
+
+            const tasksCompletedThisWeek = allTasks.filter(task =>
+                task.status === 'Completed' &&
+                task.updatedAt >= weekStart &&
+                task.updatedAt <= weekEnd
+            ).length;
+
+            const tasksCreatedThisWeek = allTasks.filter(task =>
+                task.createdAt >= weekStart &&
+                task.createdAt <= weekEnd
+            ).length;
+
+            weeklyData.unshift({
+                week: `Week ${weeksToShow - i}`,
+                weekLabel: weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                completed: tasksCompletedThisWeek,
+                created: tasksCreatedThisWeek
+            });
+        }
+
+        // Calculate average completion time (for completed tasks with activity log)
+        let avgCompletionTime = 0;
+        const completedTasksWithTime = allTasks.filter(task => 
+            task.status === 'Completed' && task.createdAt && task.updatedAt
+        );
+        
+        if (completedTasksWithTime.length > 0) {
+            const totalTime = completedTasksWithTime.reduce((sum, task) => {
+                const created = new Date(task.createdAt);
+                const completed = new Date(task.updatedAt);
+                return sum + (completed - created);
+            }, 0);
+            avgCompletionTime = Math.round(totalTime / completedTasksWithTime.length / (1000 * 60 * 60 * 24)); // Days
+        }
+
+        // On-time completion rate
+        const completedTasks = allTasks.filter(t => t.status === 'Completed');
+        const onTimeCompletions = completedTasks.filter(task => 
+            task.dueDate && new Date(task.updatedAt) <= new Date(task.dueDate)
+        ).length;
+        const onTimeRate = completedTasks.length > 0 
+            ? Math.round((onTimeCompletions / completedTasks.length) * 100) 
+            : 0;
+
+        // Current streak (consecutive days with at least one task completed)
+        let currentStreak = 0;
+        let checkDate = new Date();
+        checkDate.setHours(0, 0, 0, 0);
+        
+        while (true) {
+            const dayStart = new Date(checkDate);
+            const dayEnd = new Date(checkDate);
+            dayEnd.setHours(23, 59, 59, 999);
+            
+            const completedOnDay = allTasks.some(task =>
+                task.status === 'Completed' &&
+                new Date(task.updatedAt) >= dayStart &&
+                new Date(task.updatedAt) <= dayEnd
+            );
+            
+            if (completedOnDay) {
+                currentStreak++;
+                checkDate.setDate(checkDate.getDate() - 1);
+            } else {
+                break;
+            }
+            
+            // Don't check more than 365 days
+            if (currentStreak > 365) break;
+        }
+
+        // Tasks by priority completed
+        const completedByPriority = {
+            High: completedInPeriod.filter(t => t.priority === 'High').length,
+            Medium: completedInPeriod.filter(t => t.priority === 'Medium').length,
+            Low: completedInPeriod.filter(t => t.priority === 'Low').length
+        };
+
+        // Checklist completion rate
+        let checklistStats = { total: 0, completed: 0 };
+        allTasks.forEach(task => {
+            if (task.todoChecklist && task.todoChecklist.length > 0) {
+                checklistStats.total += task.todoChecklist.length;
+                checklistStats.completed += task.todoChecklist.filter(item => item.completed).length;
+            }
+        });
+        const checklistCompletionRate = checklistStats.total > 0 
+            ? Math.round((checklistStats.completed / checklistStats.total) * 100)
+            : 0;
+
+        // Overdue tasks
+        const overdueTasks = allTasks.filter(task =>
+            task.status !== 'Completed' &&
+            task.dueDate &&
+            new Date(task.dueDate) < new Date()
+        ).length;
+
+        // Productivity score (0-100) - weighted calculation
+        const totalTaskWeight = Math.min(allTasks.length / 10, 1) * 20; // Up to 20 points for task volume
+        const completionRateWeight = (completedTasks.length / Math.max(allTasks.length, 1)) * 25; // Up to 25 points
+        const onTimeWeight = onTimeRate * 0.25; // Up to 25 points
+        const streakWeight = Math.min(currentStreak / 7, 1) * 15; // Up to 15 points for week streak
+        const checklistWeight = checklistCompletionRate * 0.15; // Up to 15 points
+        
+        const productivityScore = Math.min(100, Math.round(
+            totalTaskWeight + completionRateWeight + onTimeWeight + streakWeight + checklistWeight
+        ));
+
+        res.json({
+            period: daysToAnalyze,
+            summary: {
+                totalTasks: allTasks.length,
+                completedTasks: completedTasks.length,
+                pendingTasks: allTasks.filter(t => t.status === 'Pending').length,
+                inProgressTasks: allTasks.filter(t => t.status === 'In Progress').length,
+                overdueTasks,
+                productivityScore
+            },
+            periodStats: {
+                tasksCompleted: completedInPeriod.length,
+                tasksCreated: createdInPeriod.length,
+                avgCompletionTime, // in days
+                onTimeRate,
+                currentStreak
+            },
+            completedByPriority,
+            checklistStats: {
+                total: checklistStats.total,
+                completed: checklistStats.completed,
+                rate: checklistCompletionRate
+            },
+            weeklyTrend: weeklyData
+        });
+
+    } catch (error) {
+        sendError(res, 'Server error', 500, error);
+    }
+};
+
+// @desc   Get team productivity statistics (Admin only)
+// @route  GET /api/tasks/team-productivity-stats
+// @access Private (Admin)
+const getTeamProductivityStats = async (req, res) => {
+    try {
+        if (!isAdmin(req.user)) {
+            return sendForbidden(res, 'Admin access required');
+        }
+
+        const { period = '30' } = req.query;
+        const daysToAnalyze = parseInt(period) || 30;
+        
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - daysToAnalyze);
+        startDate.setHours(0, 0, 0, 0);
+
+        // Get organization domain
+        const domain = getOrgDomain(req.user.email);
+        if (isPublicDomain(domain)) {
+            return sendForbidden(res, 'Admin access restricted for public domains.');
+        }
+
+        // Get all users in the organization (excluding admin)
+        const orgUsers = await User.find({
+            email: { $regex: `@${domain}$`, $options: 'i' },
+            role: { $ne: 'admin' }
+        }).select('_id name email profileImageUrl').lean();
+
+        // Get productivity stats for each user
+        const teamStats = await Promise.all(orgUsers.map(async (user) => {
+            const allTasks = await Task.find({ assignedTo: user._id }).lean();
+            
+            const completedTasks = allTasks.filter(t => t.status === 'Completed');
+            const completedInPeriod = allTasks.filter(task => 
+                task.status === 'Completed' && 
+                task.updatedAt >= startDate
+            );
+
+            // On-time completion rate
+            const onTimeCompletions = completedTasks.filter(task => 
+                task.dueDate && new Date(task.updatedAt) <= new Date(task.dueDate)
+            ).length;
+            const onTimeRate = completedTasks.length > 0 
+                ? Math.round((onTimeCompletions / completedTasks.length) * 100) 
+                : 0;
+
+            // Overdue tasks
+            const overdueTasks = allTasks.filter(task =>
+                task.status !== 'Completed' &&
+                task.dueDate &&
+                new Date(task.dueDate) < new Date()
+            ).length;
+
+            // Checklist stats
+            let checklistTotal = 0;
+            let checklistCompleted = 0;
+            allTasks.forEach(task => {
+                if (task.todoChecklist && task.todoChecklist.length > 0) {
+                    checklistTotal += task.todoChecklist.length;
+                    checklistCompleted += task.todoChecklist.filter(item => item.completed).length;
+                }
+            });
+
+            // Current streak
+            let currentStreak = 0;
+            let checkDate = new Date();
+            checkDate.setHours(0, 0, 0, 0);
+            
+            while (currentStreak < 365) {
+                const dayStart = new Date(checkDate);
+                const dayEnd = new Date(checkDate);
+                dayEnd.setHours(23, 59, 59, 999);
+                
+                const completedOnDay = allTasks.some(task =>
+                    task.status === 'Completed' &&
+                    new Date(task.updatedAt) >= dayStart &&
+                    new Date(task.updatedAt) <= dayEnd
+                );
+                
+                if (completedOnDay) {
+                    currentStreak++;
+                    checkDate.setDate(checkDate.getDate() - 1);
+                } else {
+                    break;
+                }
+            }
+
+            // Calculate productivity score
+            const totalTaskWeight = Math.min(allTasks.length / 10, 1) * 20;
+            const completionRateWeight = (completedTasks.length / Math.max(allTasks.length, 1)) * 25;
+            const onTimeWeight = onTimeRate * 0.25;
+            const streakWeight = Math.min(currentStreak / 7, 1) * 15;
+            const checklistRate = checklistTotal > 0 ? (checklistCompleted / checklistTotal) * 100 : 0;
+            const checklistWeight = checklistRate * 0.15;
+            
+            const productivityScore = Math.min(100, Math.round(
+                totalTaskWeight + completionRateWeight + onTimeWeight + streakWeight + checklistWeight
+            ));
+
+            return {
+                user: {
+                    _id: user._id,
+                    name: user.name,
+                    email: user.email,
+                    profileImageUrl: user.profileImageUrl
+                },
+                totalTasks: allTasks.length,
+                completedTasks: completedTasks.length,
+                completedInPeriod: completedInPeriod.length,
+                pendingTasks: allTasks.filter(t => t.status === 'Pending').length,
+                inProgressTasks: allTasks.filter(t => t.status === 'In Progress').length,
+                overdueTasks,
+                onTimeRate,
+                currentStreak,
+                productivityScore
+            };
+        }));
+
+        // Sort by productivity score (highest first)
+        teamStats.sort((a, b) => b.productivityScore - a.productivityScore);
+
+        // Calculate team averages
+        const teamAverage = {
+            avgProductivityScore: teamStats.length > 0 
+                ? Math.round(teamStats.reduce((sum, s) => sum + s.productivityScore, 0) / teamStats.length) 
+                : 0,
+            totalCompleted: teamStats.reduce((sum, s) => sum + s.completedInPeriod, 0),
+            avgOnTimeRate: teamStats.length > 0 
+                ? Math.round(teamStats.reduce((sum, s) => sum + s.onTimeRate, 0) / teamStats.length) 
+                : 0,
+            totalOverdue: teamStats.reduce((sum, s) => sum + s.overdueTasks, 0)
+        };
+
+        res.json({
+            period: daysToAnalyze,
+            teamSize: teamStats.length,
+            teamAverage,
+            members: teamStats
+        });
+
+    } catch (error) {
+        sendError(res, 'Server error', 500, error);
+    }
+};
+
 module.exports = {
     getTasks,
+    searchTasks,
     getTaskById,
     createTask,
     updateTask,
@@ -790,6 +1291,8 @@ module.exports = {
     updateTaskChecklist,
     getDashboardData,
     getUserDashboardData,
+    getProductivityStats,
+    getTeamProductivityStats,
     addComment,
     getComments,
     deleteComment,
@@ -799,4 +1302,5 @@ module.exports = {
     getAllLabels,
     triggerReminders,
     sendTaskReminder,
+    duplicateTask,
 };

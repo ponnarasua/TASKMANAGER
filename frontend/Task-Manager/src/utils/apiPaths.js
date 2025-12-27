@@ -25,6 +25,7 @@ export const API_PATHS = {
         GET_DASHBOARD_DATA: '/api/tasks/dashboard-data',
         GET_USER_DASHBOARD_DATA: `/api/tasks/user-dashboard-data`,
         GET_ALL_TASKS: '/api/tasks',
+        SEARCH_TASKS: '/api/tasks/search',
         GET_TASK_BY_ID: (taskId) => `/api/tasks/${taskId}`,
         CREATE_TASK: '/api/tasks',
         UPDATE_TASK: (taskId) => `/api/tasks/${taskId}`,
@@ -32,6 +33,7 @@ export const API_PATHS = {
 
         UPDATE_TASK_STATUS: (taskId) => `/api/tasks/${taskId}/status`,
         UPDATE_TODO_CHECKLIST: (taskId) => `/api/tasks/${taskId}/todo`,
+        DUPLICATE_TASK: (taskId) => `/api/tasks/${taskId}/duplicate`,
 
         // Comments
         GET_COMMENTS: (taskId) => `/api/tasks/${taskId}/comments`,
@@ -49,6 +51,10 @@ export const API_PATHS = {
         // Reminders
         TRIGGER_REMINDERS: '/api/tasks/reminders/trigger',
         SEND_REMINDER: (taskId) => `/api/tasks/${taskId}/send-reminder`,
+
+        // Productivity
+        GET_PRODUCTIVITY_STATS: '/api/tasks/productivity-stats',
+        GET_TEAM_PRODUCTIVITY_STATS: '/api/tasks/team-productivity-stats',
     },
 
     NOTIFICATIONS: {
@@ -62,7 +68,10 @@ export const API_PATHS = {
 
     REPORTS: {
         EXPORT_TASKS: '/api/reports/export/tasks',
+        EXPORT_TASKS_PDF: '/api/reports/export/tasks/pdf',
         EXPORT_USERS: '/api/reports/export/users',
+        EXPORT_TEAM_PRODUCTIVITY: '/api/reports/export/team-productivity',
+        EXPORT_TEAM_PRODUCTIVITY_PDF: '/api/reports/export/team-productivity/pdf',
     },
 
     IMAGE : {

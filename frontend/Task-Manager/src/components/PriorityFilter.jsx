@@ -12,6 +12,8 @@ const PriorityFilter = ({ selectedPriority, onPriorityChange, sortOrder, onSortO
   const sortOptions = [
     { label: "Priority: High to Low", value: "desc" },
     { label: "Priority: Low to High", value: "asc" },
+    { label: "Due: Soonest First", value: "dueSoon" },
+    { label: "Due: Latest First", value: "dueLate" },
     { label: "Date: Newest First", value: "newest" },
     { label: "Date: Oldest First", value: "oldest" }
   ];

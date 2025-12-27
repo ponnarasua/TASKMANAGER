@@ -1,13 +1,74 @@
-import React from 'react'
+import React, { useRef } from 'react'
 import Progress from '../Progress'
 import AvatarGroup from '../AvatarGroup';
-import { LuBellRing, LuPaperclip } from 'react-icons/lu';
+import { LuBellRing, LuPaperclip, LuCopy } from 'react-icons/lu';
 import moment from 'moment';
 import { getLabelColor, getStatusTagColor, getPriorityTagColor } from '../../utils/colors';
 
-const TaskCard = ({title, description, priority, status, progress, createdAt, dueDate, assignedTo, attachmentCount, completedTodoCount, todoChecklist, labels = [], reminderSent, onClick}) => {
+const TaskCard = ({
+    taskId,
+    title, 
+    description, 
+    priority, 
+    status, 
+    progress, 
+    createdAt, 
+    dueDate, 
+    assignedTo, 
+    attachmentCount, 
+    completedTodoCount, 
+    todoChecklist, 
+    labels = [], 
+    reminderSent, 
+    onClick,
+    onDuplicate,
+    isAdmin = false
+}) => {
+    const clickCountRef = useRef(0);
+    const clickTimerRef = useRef(null);
+
+    const handleClick = (e) => {
+        // If admin and onDuplicate is provided, track triple clicks
+        if (isAdmin && onDuplicate) {
+            clickCountRef.current += 1;
+
+            if (clickTimerRef.current) {
+                clearTimeout(clickTimerRef.current);
+            }
+
+            if (clickCountRef.current === 3) {
+                e.stopPropagation();
+                clickCountRef.current = 0;
+                onDuplicate();
+                return;
+            }
+
+            clickTimerRef.current = setTimeout(() => {
+                // If not triple click, proceed with normal click after delay
+                if (clickCountRef.current < 3 && clickCountRef.current > 0) {
+                    onClick && onClick();
+                }
+                clickCountRef.current = 0;
+            }, 300);
+        } else {
+            onClick && onClick();
+        }
+    };
+
     return (
-        <div className='bg-white dark:bg-gray-900 rounded-xl py-4 shadow-md shadow-gray-100 dark:shadow-gray-900/50 border border-gray-200 dark:border-gray-800 cursor-pointer hover:shadow-lg transition-shadow' onClick={onClick}>
+        <div 
+            className='bg-white dark:bg-gray-900 rounded-xl py-4 shadow-md shadow-gray-100 dark:shadow-gray-900/50 border border-gray-200 dark:border-gray-800 cursor-pointer hover:shadow-lg transition-shadow relative group' 
+            onClick={handleClick}
+        >
+            {/* Triple-click hint for admin */}
+            {isAdmin && onDuplicate && (
+                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+                        <LuCopy className="text-xs" />
+                        3× click to duplicate
+                    </div>
+                </div>
+            )}
             <div className='flex items-end gap-3 px-4'>
                 <div className={`text-[11px] font-medium ${getStatusTagColor(status)} px-4 py-0.5 rounded`}>
                     {status}

@@ -13,6 +13,7 @@ const Dashboard = lazy(() => import('./pages/Admin/Dashboard'));
 const ManageTasks = lazy(() => import('./pages/Admin/ManageTasks'));
 const CreateTasks = lazy(() => import('./pages/Admin/CreateTasks'));
 const ManageUsers = lazy(() => import('./pages/Admin/ManageUsers'));
+const TeamProductivity = lazy(() => import('./pages/Admin/TeamProductivity'));
 const AdminSettings = lazy(() => import('./pages/Admin/AdminSettings'));
 
 // Lazy loaded User Pages
@@ -59,6 +60,7 @@ const App = () => {
             <Route path="/admin/tasks" element={<ManageTasks />} />
             <Route path="/admin/create-tasks/:taskId?" element={<CreateTasks />} />
             <Route path="/admin/users" element={<ManageUsers />} />
+            <Route path="/admin/team-productivity" element={<TeamProductivity />} />
             <Route path="/admin/settings" element={<AdminSettings />} />
             <Route path="/admin/task-details/:id" element={<ViewTaskDetails />} />
           </Route>
