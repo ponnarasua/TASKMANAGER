@@ -34,10 +34,7 @@ const sendRegistrationOTPHandler = async (req, res) => {
         if (adminInviteToken) {
             // Token provided - must be correct
             if (adminInviteToken.trim() !== process.env.ADMIN_INVITE_TOKEN) {
-                return res.status(HTTP_STATUS.UNAUTHORIZED).json({ 
-                    message: 'Invalid admin invite token. Please enter the correct token to register as admin.',
-                    field: 'adminInviteToken'
-                });
+                return sendError(res, 'Invalid admin invite token. Please enter the correct token to register as admin.', HTTP_STATUS.UNAUTHORIZED);
             }
             // Token is correct
             role = USER_ROLES.ADMIN;

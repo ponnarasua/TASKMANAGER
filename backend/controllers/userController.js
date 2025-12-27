@@ -3,6 +3,7 @@ const User = require('../models/User');
 const { getOrgDomain, isPublicDomain } = require('../utils/domainHelper');
 const { sendError, sendNotFound, sendForbidden } = require('../utils/responseHelper');
 const { isAdmin } = require('../utils/authHelper');
+const { USER_ROLES } = require('../utils/constants');
 
 // @desc Get all users (Admin only)
 // @route GET /api/users/
@@ -19,7 +20,7 @@ async function getUsers(req, res) {
 
         // Get only users with the same domain
         const users = await User.find({
-            role: 'member',
+            role: USER_ROLES.MEMBER,
             email: { $regex: `@${domain}$`, $options: 'i' }
         }).select("-password");
 

@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { USER_ROLES } = require('../utils/constants');
 
 // Middleware to protect routes
 const protect = async (req, res, next) => {
@@ -31,7 +32,7 @@ const protect = async (req, res, next) => {
 
 // Middleware for Admin-only access
 const adminOnly = (req, res, next) => {
-    if (req.user && req.user.role === 'admin') {
+    if (req.user && req.user.role === USER_ROLES.ADMIN) {
         next();
     } else {
         res.status(403).json({ message: 'Access denied, admin only' });

@@ -22,156 +22,117 @@ const addActivityLog = (task, userId, action, details = '', oldValue = '', newVa
 // @desc   Get all tasks (Admin: all, User: only assigned tasks)
 // @route  GET /api/tasks
 // @access Private
+const { getTasksService } = require('../services/taskService');
 const getTasks = async (req, res) => {
-  try {
-    const { status, page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
-    
-    // Pagination
-    const pageNum = Math.max(1, parseInt(page));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit))); // Max 100 items per page
-    const skip = (pageNum - 1) * limitNum;
-    
-    // Sorting
-    const sortOptions = {};
-    sortOptions[sortBy] = sortOrder === 'asc' ? 1 : -1;
-    
-    let filter = {};
-    if (status) filter.status = status;
-
-    let tasks;
-    let totalTasks;
-
-    if (isAdmin(req.user)) {
-      const domain = getOrgDomain(req.user.email);
-      if (isPublicDomain(domain)) {
-        return sendForbidden(res, 'Admin access restricted for public domains.');
-      }
-
-      // Get total count for pagination
-      totalTasks = await Task.countDocuments(filter);
-
-      tasks = await Task.find(filter)
-        .populate({
-          path: 'assignedTo',
-          select: 'name email profileImageUrl',
-          match: { email: { $regex: `@${domain}$`, $options: 'i' } },
-        })
-        .sort(sortOptions)
-        .skip(skip)
-        .limit(limitNum)
-        .lean(); // Use lean() for better performance
-
-      tasks = tasks.filter(task => task.assignedTo); // remove non-org tasks
-    } else {
-      // Get total count for pagination
-      totalTasks = await Task.countDocuments({ ...filter, assignedTo: req.user._id });
-
-      tasks = await Task.find({ ...filter, assignedTo: req.user._id })
-        .populate("assignedTo", "name email profileImageUrl")
-        .sort(sortOptions)
-        .skip(skip)
-        .limit(limitNum)
-        .lean(); // Use lean() for better performance
+    try {
+        const { tasks, totalTasks } = await getTasksService(req.user, req.query);
+        const pageNum = Math.max(1, parseInt(req.query.page || 1));
+        const limitNum = Math.min(100, Math.max(1, parseInt(req.query.limit || 20)));
+        const filteredTasks = tasks;
+        const pendingTasks = filteredTasks.filter(t => t.status === 'Pending').length;
+        const inProgressTasks = filteredTasks.filter(t => t.status === 'In Progress').length;
+        const completedTasks = filteredTasks.filter(t => t.status === 'Completed').length;
+        const totalPages = Math.ceil(totalTasks / limitNum);
+        res.json({
+            tasks: filteredTasks,
+            statusSummary: {
+                all: filteredTasks.length,
+                pendingTasks,
+                inProgressTasks,
+                completedTasks,
+            },
+            pagination: {
+                currentPage: pageNum,
+                totalPages,
+                totalItems: totalTasks,
+                itemsPerPage: limitNum,
+                hasNextPage: pageNum < totalPages,
+                hasPrevPage: pageNum > 1,
+            }
+        });
+    } catch (error) {
+        if (error.message && error.message.includes('Admin access restricted')) {
+            return sendForbidden(res, error.message);
+        }
+        sendError(res, 'Server error', 500, error);
     }
-
-    // Add completed checklist count
-    tasks = tasks.map((task) => {
-      const completedCount = task.todoChecklist?.filter(item => item.completed).length || 0;
-      return { ...task, completedCount };
-    });
-
-    const filteredTasks = tasks; // after domain filtering
-
-    const pendingTasks = filteredTasks.filter(t => t.status === 'Pending').length;
-    const inProgressTasks = filteredTasks.filter(t => t.status === 'In Progress').length;
-    const completedTasks = filteredTasks.filter(t => t.status === 'Completed').length;
-
-    // Pagination metadata
-    const totalPages = Math.ceil(totalTasks / limitNum);
-
-    res.json({
-      tasks: filteredTasks,
-      statusSummary: {
-        all: filteredTasks.length,
-        pendingTasks,
-        inProgressTasks,
-        completedTasks,
-      },
-      pagination: {
-        currentPage: pageNum,
-        totalPages,
-        totalItems: totalTasks,
-        itemsPerPage: limitNum,
-        hasNextPage: pageNum < totalPages,
-        hasPrevPage: pageNum > 1,
-      }
-    });
-
-  } catch (error) {
-    sendError(res, 'Server error', 500, error);
-  }
 };
 
 // @desc   Search tasks with filters
 // @route  GET /api/tasks/search
 // @access Private
+const { validateRequiredFields } = require('../utils/validation');
 const searchTasks = async (req, res) => {
-  try {
-    const { 
-      q = '',           // Search query (title, description)
-      status,           // Filter by status
-      priority,         // Filter by priority
-      assignee,         // Filter by assignee ID
-      dueDateFrom,      // Filter by due date range start
-      dueDateTo,        // Filter by due date range end
-      page = 1, 
-      limit = 20 
-    } = req.query;
+    try {
+        const { 
+            q = '',           // Search query (title, description)
+            status,           // Filter by status
+            priority,         // Filter by priority
+            assignee,         // Filter by assignee ID
+            dueDateFrom,      // Filter by due date range start
+            dueDateTo,        // Filter by due date range end
+            page = 1, 
+            limit = 20 
+        } = req.query;
 
-    const pageNum = Math.max(1, parseInt(page));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
-    const skip = (pageNum - 1) * limitNum;
+        // Validate pagination
+        if (isNaN(page) || isNaN(limit) || page < 1 || limit < 1) {
+            return sendError(res, 'Invalid pagination parameters', 400);
+        }
+        // Validate status/priority
+        const validStatuses = ['Pending', 'In Progress', 'Completed'];
+        const validPriorities = ['Low', 'Medium', 'High'];
+        if (status && !validStatuses.includes(status)) {
+            return sendError(res, 'Invalid status filter', 400);
+        }
+        if (priority && !validPriorities.includes(priority)) {
+            return sendError(res, 'Invalid priority filter', 400);
+        }
 
-    // Build filter object
-    let filter = {};
+        const pageNum = Math.max(1, parseInt(page));
+        const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+        const skip = (pageNum - 1) * limitNum;
 
-    // Text search on title and description
-    if (q && q.trim()) {
-      const searchRegex = new RegExp(q.trim(), 'i');
-      filter.$or = [
-        { title: searchRegex },
-        { description: searchRegex }
-      ];
-    }
+        // Build filter object
+        let filter = {};
 
-    // Status filter
-    if (status && ['Pending', 'In Progress', 'Completed'].includes(status)) {
-      filter.status = status;
-    }
+        // Text search on title and description
+        if (q && q.trim()) {
+            const searchRegex = new RegExp(q.trim(), 'i');
+            filter.$or = [
+                { title: searchRegex },
+                { description: searchRegex }
+            ];
+        }
 
-    // Priority filter
-    if (priority && ['Low', 'Medium', 'High'].includes(priority)) {
-      filter.priority = priority;
-    }
+        // Status filter
+        if (status && validStatuses.includes(status)) {
+            filter.status = status;
+        }
 
-    // Due date range filter
-    if (dueDateFrom || dueDateTo) {
-      filter.dueDate = {};
-      if (dueDateFrom) filter.dueDate.$gte = new Date(dueDateFrom);
-      if (dueDateTo) filter.dueDate.$lte = new Date(dueDateTo);
-    }
+        // Priority filter
+        if (priority && validPriorities.includes(priority)) {
+            filter.priority = priority;
+        }
 
-    // Assignee filter
-    if (assignee) {
-      filter.assignedTo = assignee;
-    }
+        // Due date range filter
+        if (dueDateFrom || dueDateTo) {
+            filter.dueDate = {};
+            if (dueDateFrom) filter.dueDate.$gte = new Date(dueDateFrom);
+            if (dueDateTo) filter.dueDate.$lte = new Date(dueDateTo);
+        }
 
-    let tasks;
-    let totalTasks;
+        // Assignee filter
+        if (assignee) {
+            filter.assignedTo = assignee;
+        }
 
-    if (isAdmin(req.user)) {
-      const domain = getOrgDomain(req.user.email);
-      if (isPublicDomain(domain)) {
+        let tasks;
+        let totalTasks;
+
+        if (isAdmin(req.user)) {
+            const domain = getOrgDomain(req.user.email);
+            if (isPublicDomain(domain)) {
         return sendForbidden(res, 'Admin access restricted for public domains.');
       }
 

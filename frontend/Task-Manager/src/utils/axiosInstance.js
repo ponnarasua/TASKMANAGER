@@ -1,4 +1,5 @@
 import axios from 'axios';
+import toast from 'react-hot-toast';
 import { BASE_URL } from './apiPaths';
 
 const axiosInstance = axios.create({
@@ -34,11 +35,20 @@ axiosInstance.interceptors.response.use(
                 window.location.href = '/login';
             }else if(error.response.status === 500){
                 // Handle server error
-                alert('Internal server error. Please try again later.');
+                toast.error('Internal server error. Please try again later.');
+            }else if(error.response.status === 503){
+                // Handle service unavailable
+                toast.error('Service temporarily unavailable. Please try again later.');
             }
         }else if(error.code === 'ECONNABORTED'){
-            // Handle network error
-            alert('Request timed out. Please check your internet connection and try again.');
+            // Handle request timeout
+            toast.error('Request timed out. Please check your internet connection and try again.');
+        }else if(error.code === 'ERR_NETWORK' || !navigator.onLine){
+            // Handle network error (no internet connection)
+            toast.error('No internet connection. Please check your network and try again.');
+        }else if(error.request){
+            // Request was made but no response received
+            toast.error('Unable to reach server. Please try again later.');
         }
         return Promise.reject(error);
     }

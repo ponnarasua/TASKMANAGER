@@ -73,6 +73,19 @@ app.use("/api/tasks", taskRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/notifications", notificationRoutes);
 
+// Health Check Endpoint - for deployment monitoring
+app.get("/api/health", (req, res) => {
+  const mongoose = require('mongoose');
+  const healthcheck = {
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+  };
+  res.status(200).json(healthcheck);
+});
+
 // Serve uploads folder
 // app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 

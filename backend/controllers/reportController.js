@@ -8,57 +8,17 @@ const { sendError, sendForbidden } = require('../utils/responseHelper');
 // @desc Export all tasks as an Excel file (Org-based)
 // @route GET /api/reports/export/tasks
 // @access Private (Admin)
+const { exportTasksReportService } = require('../services/reportService');
 const exportTasksReport = async(req, res) => {
     try {
-        const domain = getOrgDomain(req.user.email);
-        if (isPublicDomain(domain)) {
-            return sendForbidden(res, 'Export not allowed for public domain admins.');
-        }
-
-        const emailRegex = buildOrgEmailRegex(domain);
-        const tasks = await Task.find()
-            .populate({
-                path: 'assignedTo',
-                select: 'name email',
-                match: { email: emailRegex }
-            });
-
-        const workbook = new excelJS.Workbook();
-        const worksheet = workbook.addWorksheet("Tasks Report");
-
-        worksheet.columns = [
-            { header: "Task ID", key: "_id", width: 25 },
-            { header: "Title", key: "title", width: 30 },
-            { header: "Description", key: "description", width: 50 },
-            { header: "Priority", key: "priority", width: 15 },
-            { header: "Status", key: "status", width: 20 },
-            { header: "Due Date", key: "dueDate", width: 20 },
-            { header: "Assigned To", key: "assignedTo", width: 30 },
-        ];
-
-        tasks.forEach(task => {
-            if (!task.assignedTo || task.assignedTo.length === 0) return;
-
-            const assignedTo = Array.isArray(task.assignedTo)
-                ? task.assignedTo.map(user => `${user.name} (${user.email})`).join(", ")
-                : `${task.assignedTo.name} (${task.assignedTo.email})`;
-
-            worksheet.addRow({
-                _id: task._id,
-                title: task.title,
-                description: task.description,
-                priority: task.priority,
-                status: task.status,
-                dueDate: task.dueDate?.toISOString().split('T')[0] || '',
-                assignedTo: assignedTo || "Unassigned",
-            });
-        });
-
+        const workbook = await exportTasksReportService(req.user);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         res.setHeader("Content-Disposition", `attachment; filename=tasks_report.xlsx`);
         return workbook.xlsx.write(res).then(() => res.status(200).end());
-
     } catch (error) {
+        if (error.message && error.message.includes('Export not allowed')) {
+            return sendForbidden(res, error.message);
+        }
         sendError(res, 'Error exporting tasks', 500, error);
     }
 };

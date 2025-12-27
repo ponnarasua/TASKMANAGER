@@ -24,6 +24,36 @@ const validatePassword = (password) => {
     if (password.length < 6) {
         return 'Password must be at least 6 characters long';
     }
+    if (password.length > 128) {
+        return 'Password must be less than 128 characters';
+    }
+    return null;
+};
+
+// Sanitize input to prevent XSS attacks
+const sanitizeInput = (input) => {
+    if (typeof input !== 'string') return input;
+    return input
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;')
+        .trim();
+};
+
+// Validate name (letters, spaces, hyphens, apostrophes only)
+const validateName = (name) => {
+    if (name.length < 2) {
+        return 'Name must be at least 2 characters long';
+    }
+    if (name.length > 100) {
+        return 'Name must be less than 100 characters';
+    }
+    // Allow letters (including unicode), spaces, hyphens, and apostrophes
+    const nameRegex = /^[\p{L}\s\-']+$/u;
+    if (!nameRegex.test(name)) {
+        return 'Name can only contain letters, spaces, hyphens, and apostrophes';
+    }
     return null;
 };
 
@@ -38,10 +68,25 @@ const validateRegistration = (req, res, next) => {
             errors: requiredErrors 
         });
     }
+
+    // Validate name
+    const nameError = validateName(name);
+    if (nameError) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
+            message: nameError 
+        });
+    }
     
     if (!validateEmail(email)) {
         return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
             message: 'Invalid email format' 
+        });
+    }
+
+    // Check email length
+    if (email.length > 254) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
+            message: 'Email address is too long' 
         });
     }
     
@@ -51,6 +96,9 @@ const validateRegistration = (req, res, next) => {
             message: passwordError 
         });
     }
+
+    // Sanitize name
+    req.body.name = sanitizeInput(name);
     
     next();
 };
@@ -238,4 +286,6 @@ module.exports = {
     validateRequiredFields,
     validateEmail,
     validatePassword,
+    validateName,
+    sanitizeInput,
 };

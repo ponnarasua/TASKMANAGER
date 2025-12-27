@@ -2,6 +2,8 @@ import React, { useContext } from 'react'
 import { Navigate, Outlet } from 'react-router-dom'
 import { UserContext } from '../context/userContext'
 
+import { USER_ROLES } from '../utils/constants';
+
 const PrivateRoute = ({ allowedRoles }) => {
   const { user, loading } = useContext(UserContext);
 
@@ -22,7 +24,7 @@ const PrivateRoute = ({ allowedRoles }) => {
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     // Redirect to appropriate dashboard based on role
-    const redirectPath = user.role === 'admin' ? '/admin/dashboard' : '/user/dashboard';
+    const redirectPath = user.role === USER_ROLES.ADMIN ? '/admin/dashboard' : '/user/dashboard';
     return <Navigate to={redirectPath} replace />;
   }
 
