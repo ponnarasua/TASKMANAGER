@@ -8,11 +8,11 @@ const { sendError, sendNotFound } = require('../utils/responseHelper');
 // @route POST /api/auth/register
 // @access Public
 const { validateRequiredFields, validateEmail, validatePassword, validateName } = require('../utils/validation');
+const { registerUserService } = require('../services/authService');
 const registerUser = async (req , res) => {
     try {
-        let { name, email, password , profileImageUrl, adminInviteToken } = req.body;
-
         // Input validation
+        let { name, email, password } = req.body;
         const requiredErrors = validateRequiredFields(['name', 'email', 'password'], req.body);
         if (requiredErrors.length > 0) {
             return sendError(res, requiredErrors.join(', '), HTTP_STATUS.BAD_REQUEST);
@@ -28,45 +28,19 @@ const registerUser = async (req , res) => {
         if (passwordError) {
             return sendError(res, passwordError, HTTP_STATUS.BAD_REQUEST);
         }
-
-        // Check if email is from a public domain
-        const emailDomain = getOrgDomain(email);
-        if (isPublicDomain(emailDomain)) {
-            return sendError(res, 'Registration is only allowed for private organization email addresses. Public email domains (Gmail, Yahoo, Outlook, etc.) are not permitted.', HTTP_STATUS.FORBIDDEN);
-        }
-
-        const userExists = await User.findOne({ email });
-        if (userExists) {
-            return sendError(res, 'User already exists', HTTP_STATUS.BAD_REQUEST);
-        }
-
-        // Validate admin invite token
-        let role = USER_ROLES.MEMBER;
-        if (adminInviteToken) {
-            if (adminInviteToken.trim() !== process.env.ADMIN_INVITE_TOKEN) {
-                return sendError(res, 'Invalid admin invite token. Please enter the correct token to register as admin.', HTTP_STATUS.UNAUTHORIZED);
-            }
-            role = USER_ROLES.ADMIN;
-        }
-
-        const hashedPassword = await hashPassword(password);
-        profileImageUrl = profileImageUrl?.replace(/^https:\/\/res\.cloudinary\.com\/dqhu7vgbc\/image\/upload\//, '');
-        const user = await User.create({
-            name,
-            email,
-            password: hashedPassword,
-            profileImageUrl,
-            role
-        });
-        res.status(HTTP_STATUS.CREATED).json({
-            _id: user._id,
-            name: user.name,
-            email: user.email,
-            profileImageUrl: user.profileImageUrl,
-            role: user.role,
-            token: generateToken(user),
-        });
+        // Service call
+        const user = await registerUserService(req.body);
+        res.status(HTTP_STATUS.CREATED).json(user);
     } catch (error) {
+        if (error.message && error.message.includes('Registration is only allowed')) {
+            return sendError(res, error.message, HTTP_STATUS.FORBIDDEN);
+        }
+        if (error.message && error.message.includes('already exists')) {
+            return sendError(res, error.message, HTTP_STATUS.BAD_REQUEST);
+        }
+        if (error.message && error.message.includes('admin invite token')) {
+            return sendError(res, error.message, HTTP_STATUS.UNAUTHORIZED);
+        }
         sendError(res, 'Server error', HTTP_STATUS.INTERNAL_SERVER_ERROR, error);
     }
 };

@@ -6,6 +6,7 @@ const { createNotification } = require('./notificationController');
 const { getOrgDomain, isPublicDomain, getFrontendUrl, buildTaskUrl } = require('../utils/domainHelper');
 const { sendError, sendNotFound, sendForbidden, sendBadRequest } = require('../utils/responseHelper');
 const { isAdmin } = require('../utils/authHelper');
+const { sanitizeInput, validateName } = require('../utils/validation');
 
 // Helper function to add activity log
 const addActivityLog = (task, userId, action, details = '', oldValue = '', newValue = '') => {
@@ -25,22 +26,80 @@ const addActivityLog = (task, userId, action, details = '', oldValue = '', newVa
 const { getTasksService } = require('../services/taskService');
 const getTasks = async (req, res) => {
     try {
-        const { tasks, totalTasks } = await getTasksService(req.user, req.query);
-        const pageNum = Math.max(1, parseInt(req.query.page || 1));
-        const limitNum = Math.min(100, Math.max(1, parseInt(req.query.limit || 20)));
-        const filteredTasks = tasks;
-        const pendingTasks = filteredTasks.filter(t => t.status === 'Pending').length;
-        const inProgressTasks = filteredTasks.filter(t => t.status === 'In Progress').length;
-        const completedTasks = filteredTasks.filter(t => t.status === 'Completed').length;
+        // Parse query params
+        const q = req.query.q || '';
+        const status = req.query.status || '';
+        const priority = req.query.priority || '';
+        const assignee = req.query.assignee || '';
+        const dueDateFrom = req.query.dueDateFrom || '';
+        const dueDateTo = req.query.dueDateTo || '';
+        const pageNum = parseInt(req.query.page) || 1;
+        const limitNum = parseInt(req.query.limit) || 10;
+        const skip = (pageNum - 1) * limitNum;
+        let filter = {};
+        let tasks = [];
+        let totalTasks = 0;
+
+        // Build filter
+        if (q) {
+            filter.title = { $regex: q, $options: 'i' };
+        }
+        if (status) {
+            filter.status = status;
+        }
+        if (priority) {
+            filter.priority = priority;
+        }
+        if (assignee) {
+            filter.assignedTo = assignee;
+        }
+        if (dueDateFrom || dueDateTo) {
+            filter.dueDate = {};
+            if (dueDateFrom) filter.dueDate.$gte = new Date(dueDateFrom);
+            if (dueDateTo) filter.dueDate.$lte = new Date(dueDateTo);
+        }
+
+        if (isAdmin(req.user)) {
+            const domain = getOrgDomain(req.user.email);
+            if (isPublicDomain(domain)) {
+                return sendForbidden(res, 'Admin access restricted for public domains.');
+            }
+            totalTasks = await Task.countDocuments(filter);
+            tasks = await Task.find(filter)
+                .populate({
+                    path: 'assignedTo',
+                    select: 'name email profileImageUrl',
+                    match: { email: { $regex: `@${domain}$`, $options: 'i' } },
+                })
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limitNum)
+                .lean();
+            tasks = tasks.filter(task => task.assignedTo && task.assignedTo.length > 0);
+        } else {
+            // Non-admin can only search their own tasks
+            filter.assignedTo = req.user._id;
+            totalTasks = await Task.countDocuments(filter);
+            tasks = await Task.find(filter)
+                .populate('assignedTo', 'name email profileImageUrl')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limitNum)
+                .lean();
+        }
+
+        // Add completed checklist count
+        tasks = tasks.map((task) => {
+            const completedCount = task.todoChecklist?.filter(item => item.completed).length || 0;
+            return { ...task, completedCount };
+        });
+
         const totalPages = Math.ceil(totalTasks / limitNum);
+
         res.json({
-            tasks: filteredTasks,
-            statusSummary: {
-                all: filteredTasks.length,
-                pendingTasks,
-                inProgressTasks,
-                completedTasks,
-            },
+            tasks,
+            query: q,
+            filters: { status, priority, assignee, dueDateFrom, dueDateTo },
             pagination: {
                 currentPage: pageNum,
                 totalPages,
@@ -48,178 +107,40 @@ const getTasks = async (req, res) => {
                 itemsPerPage: limitNum,
                 hasNextPage: pageNum < totalPages,
                 hasPrevPage: pageNum > 1,
-            }
+            },
         });
     } catch (error) {
-        if (error.message && error.message.includes('Admin access restricted')) {
-            return sendForbidden(res, error.message);
-        }
         sendError(res, 'Server error', 500, error);
     }
-};
-
-// @desc   Search tasks with filters
-// @route  GET /api/tasks/search
-// @access Private
-const { validateRequiredFields } = require('../utils/validation');
-const searchTasks = async (req, res) => {
-    try {
-        const { 
-            q = '',           // Search query (title, description)
-            status,           // Filter by status
-            priority,         // Filter by priority
-            assignee,         // Filter by assignee ID
-            dueDateFrom,      // Filter by due date range start
-            dueDateTo,        // Filter by due date range end
-            page = 1, 
-            limit = 20 
-        } = req.query;
-
-        // Validate pagination
-        if (isNaN(page) || isNaN(limit) || page < 1 || limit < 1) {
-            return sendError(res, 'Invalid pagination parameters', 400);
-        }
-        // Validate status/priority
-        const validStatuses = ['Pending', 'In Progress', 'Completed'];
-        const validPriorities = ['Low', 'Medium', 'High'];
-        if (status && !validStatuses.includes(status)) {
-            return sendError(res, 'Invalid status filter', 400);
-        }
-        if (priority && !validPriorities.includes(priority)) {
-            return sendError(res, 'Invalid priority filter', 400);
-        }
-
-        const pageNum = Math.max(1, parseInt(page));
-        const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
-        const skip = (pageNum - 1) * limitNum;
-
-        // Build filter object
-        let filter = {};
-
-        // Text search on title and description
-        if (q && q.trim()) {
-            const searchRegex = new RegExp(q.trim(), 'i');
-            filter.$or = [
-                { title: searchRegex },
-                { description: searchRegex }
-            ];
-        }
-
-        // Status filter
-        if (status && validStatuses.includes(status)) {
-            filter.status = status;
-        }
-
-        // Priority filter
-        if (priority && validPriorities.includes(priority)) {
-            filter.priority = priority;
-        }
-
-        // Due date range filter
-        if (dueDateFrom || dueDateTo) {
-            filter.dueDate = {};
-            if (dueDateFrom) filter.dueDate.$gte = new Date(dueDateFrom);
-            if (dueDateTo) filter.dueDate.$lte = new Date(dueDateTo);
-        }
-
-        // Assignee filter
-        if (assignee) {
-            filter.assignedTo = assignee;
-        }
-
-        let tasks;
-        let totalTasks;
-
-        if (isAdmin(req.user)) {
-            const domain = getOrgDomain(req.user.email);
-            if (isPublicDomain(domain)) {
-        return sendForbidden(res, 'Admin access restricted for public domains.');
-      }
-
-      totalTasks = await Task.countDocuments(filter);
-
-      tasks = await Task.find(filter)
-        .populate({
-          path: 'assignedTo',
-          select: 'name email profileImageUrl',
-          match: { email: { $regex: `@${domain}$`, $options: 'i' } },
-        })
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limitNum)
-        .lean();
-
-      tasks = tasks.filter(task => task.assignedTo && task.assignedTo.length > 0);
-    } else {
-      // Non-admin can only search their own tasks
-      filter.assignedTo = req.user._id;
-      
-      totalTasks = await Task.countDocuments(filter);
-
-      tasks = await Task.find(filter)
-        .populate('assignedTo', 'name email profileImageUrl')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limitNum)
-        .lean();
-    }
-
-    // Add completed checklist count
-    tasks = tasks.map((task) => {
-      const completedCount = task.todoChecklist?.filter(item => item.completed).length || 0;
-      return { ...task, completedCount };
-    });
-
-    const totalPages = Math.ceil(totalTasks / limitNum);
-
-    res.json({
-      tasks,
-      query: q,
-      filters: { status, priority, assignee, dueDateFrom, dueDateTo },
-      pagination: {
-        currentPage: pageNum,
-        totalPages,
-        totalItems: totalTasks,
-        itemsPerPage: limitNum,
-        hasNextPage: pageNum < totalPages,
-        hasPrevPage: pageNum > 1,
-      }
-    });
-
-  } catch (error) {
-    sendError(res, 'Server error', 500, error);
-  }
 };
 
 // @desc   Get task by ID
 // @route  GET /api/tasks/:id
 // @access Private
 const getTaskById = async (req, res) => {
-  try {
-    const task = await Task.findById(req.params.id).populate("assignedTo", "name email profileImageUrl");
+    try {
+        const taskId = sanitizeInput(req.params.id);
+        const task = await Task.findById(taskId).populate("assignedTo", "name email profileImageUrl");
 
-    if (!task) return sendNotFound(res, 'Task');
+        if (!task) return sendNotFound(res, 'Task');
 
-    console.log('Current User:', req.user);
-    console.log('Task Assigned To:', task.assignedTo);
+        if (isAdmin(req.user)) {
+            const domain = getOrgDomain(req.user.email);
+            if (
+                isPublicDomain(domain) ||
+                !task.assignedTo?.some(user => user.email.endsWith(`@${domain}`))
+            ) {
+                return sendForbidden(res, 'Unauthorized for this task');
+            }
+        } else if (!task.assignedTo.some(user => user._id.equals(req.user._id))) {
+            return sendForbidden(res, 'Unauthorized');
+        }
 
-    if (isAdmin(req.user)) {
-      const domain = getOrgDomain(req.user.email);
-      if (
-        isPublicDomain(domain) ||
-        !task.assignedTo?.some(user => user.email.endsWith(`@${domain}`))
-      ) {
-        return sendForbidden(res, 'Unauthorized for this task');
-      }
-    } else if (!task.assignedTo.some(user => user._id.equals(req.user._id))) {
-      return sendForbidden(res, 'Unauthorized');
+        res.json(task);
+    } catch (error) {
+        console.error('❌ Error in getTaskById:', error);
+        sendError(res, 'Server error', 500, error);
     }
-
-    res.json(task);
-  } catch (error) {
-    console.error('❌ Error in getTaskById:', error);
-    sendError(res, 'Server error', 500, error);
-  }
 };
 
 
@@ -227,65 +148,76 @@ const getTaskById = async (req, res) => {
 // @route  POST /api/tasks/
 // @access Private (Admin only)
 const createTask = async (req, res) => {
-  try {
-    if (!isAdmin(req.user)) {
-      return sendForbidden(res, 'Only admins can create tasks.');
-    }
-
-    const domain = getOrgDomain(req.user.email);
-    if (isPublicDomain(domain)) {
-      return sendForbidden(res, 'Admins from public domains cannot assign tasks.');
-    }
-
-    const { title, description, priority, dueDate, assignedTo, attachments, todoChecklist, labels } = req.body;
-
-    if (!Array.isArray(assignedTo)) {
-      return sendBadRequest(res, 'assignedTo must be an array of user IDs');
-    }
-
-    const users = await require('../models/User').find({ _id: { $in: assignedTo } });
-
-    // Check if all assigned users belong to the same domain
-    const invalidUsers = users.filter(u => !u.email.endsWith(`@${domain}`));
-    if (invalidUsers.length > 0) {
-      return sendBadRequest(res, 'One or more users do not belong to your organization');
-    }
-
-    const task = await Task.create({
-      title,
-      description,
-      priority,
-      dueDate,
-      assignedTo,
-      createdBy: req.user._id,
-      todoChecklist,
-      attachments,
-      labels: labels || []
-    });
-
-    // Add activity log for task creation
-    addActivityLog(task, req.user._id, 'created', `Task "${title}" was created`);
-    await task.save();
-
-    // Create notifications for assigned users
-    const assigner = await User.findById(req.user._id).select('name');
-    for (const userId of assignedTo) {
-        if (userId.toString() !== req.user._id.toString()) {
-            createNotification({
-                recipient: userId,
-                type: 'task_assigned',
-                title: 'New Task Assigned',
-                message: `${assigner.name} assigned you to "${title}"`,
-                task: task._id,
-                sender: req.user._id
-            });
+    try {
+        if (!isAdmin(req.user)) {
+            return sendForbidden(res, 'Only admins can create tasks.');
         }
-    }
 
-    res.status(201).json({ message: 'Task created successfully', task });
-  } catch (error) {
-    sendError(res, 'Server error', 500, error);
-  }
+        const domain = getOrgDomain(req.user.email);
+        if (isPublicDomain(domain)) {
+            return sendForbidden(res, 'Admins from public domains cannot assign tasks.');
+        }
+
+        // Sanitize and validate input
+        let { title, description, priority, dueDate, assignedTo, attachments, todoChecklist, labels } = req.body;
+        title = sanitizeInput(title);
+        description = sanitizeInput(description);
+        priority = sanitizeInput(priority);
+        dueDate = sanitizeInput(dueDate);
+        if (!Array.isArray(assignedTo)) {
+            return sendBadRequest(res, 'assignedTo must be an array of user IDs');
+        }
+        assignedTo = assignedTo.map(id => sanitizeInput(id));
+        if (labels) labels = labels.map(l => sanitizeInput(l));
+        if (attachments) attachments = attachments.map(a => sanitizeInput(a));
+        if (todoChecklist) todoChecklist = todoChecklist.map(item => ({
+            text: sanitizeInput(item.text),
+            completed: !!item.completed
+        }));
+
+        const users = await require('../models/User').find({ _id: { $in: assignedTo } });
+
+        // Check if all assigned users belong to the same domain
+        const invalidUsers = users.filter(u => !u.email.endsWith(`@${domain}`));
+        if (invalidUsers.length > 0) {
+            return sendBadRequest(res, 'One or more users do not belong to your organization');
+        }
+
+        const task = await Task.create({
+            title,
+            description,
+            priority,
+            dueDate,
+            assignedTo,
+            createdBy: req.user._id,
+            todoChecklist,
+            attachments,
+            labels: labels || []
+        });
+
+        // Add activity log for task creation
+        addActivityLog(task, req.user._id, 'created', `Task "${title}" was created`);
+        await task.save();
+
+        // Create notifications for assigned users
+        const assigner = await User.findById(req.user._id).select('name');
+        for (const userId of assignedTo) {
+                if (userId.toString() !== req.user._id.toString()) {
+                        createNotification({
+                                recipient: userId,
+                                type: 'task_assigned',
+                                title: 'New Task Assigned',
+                                message: `${assigner.name} assigned you to "${title}"`,
+                                task: task._id,
+                                sender: req.user._id
+                        });
+                }
+        }
+
+        res.status(201).json({ message: 'Task created successfully', task });
+    } catch (error) {
+        sendError(res, 'Server error', 500, error);
+    }
 };
 
 // @desc   Update a task
@@ -577,8 +509,11 @@ const getUserDashboardData = async (req, res) => {
 // @access Private
 const addComment = async (req, res) => {
     try {
-        const { text, mentions = [] } = req.body;
-        const task = await Task.findById(req.params.id);
+        let { text, mentions = [] } = req.body;
+        text = sanitizeInput(text);
+        mentions = Array.isArray(mentions) ? mentions.map(id => sanitizeInput(id)) : [];
+        const taskId = sanitizeInput(req.params.id);
+        const task = await Task.findById(taskId);
 
         if (!task) return sendNotFound(res, 'Task');
 
@@ -635,7 +570,7 @@ const addComment = async (req, res) => {
         }
 
         // Populate the user info for the response
-        const updatedTask = await Task.findById(req.params.id)
+        const updatedTask = await Task.findById(taskId)
             .populate('comments.user', 'name email profileImageUrl')
             .populate('comments.mentions', 'name email profileImageUrl')
             .populate('activityLog.user', 'name email profileImageUrl');
@@ -714,8 +649,10 @@ const getActivityLog = async (req, res) => {
 // @access Private (Admin only)
 const addLabels = async (req, res) => {
     try {
-        const { labels } = req.body;
-        const task = await Task.findById(req.params.id);
+        let { labels } = req.body;
+        labels = Array.isArray(labels) ? labels.map(l => sanitizeInput(l)) : [];
+        const taskId = sanitizeInput(req.params.id);
+        const task = await Task.findById(taskId);
 
         if (!task) return sendNotFound(res, 'Task');
 
@@ -744,8 +681,9 @@ const addLabels = async (req, res) => {
 // @access Private (Admin only)
 const removeLabel = async (req, res) => {
     try {
-        const task = await Task.findById(req.params.id);
-        const labelToRemove = decodeURIComponent(req.params.label);
+        const taskId = sanitizeInput(req.params.id);
+        const labelToRemove = sanitizeInput(decodeURIComponent(req.params.label));
+        const task = await Task.findById(taskId);
 
         if (!task) return sendNotFound(res, 'Task');
 
@@ -1237,6 +1175,21 @@ const getTeamProductivityStats = async (req, res) => {
         });
 
     } catch (error) {
+        sendError(res, 'Server error', 500, error);
+    }
+};
+
+const { searchTasksService } = require('../services/taskSearchService');
+
+// Controller for searching tasks (delegates to service)
+const searchTasks = async (req, res) => {
+    try {
+        const { tasks, totalTasks } = await searchTasksService(req.user, req.query);
+        res.json({ tasks, totalTasks });
+    } catch (error) {
+        if (error.message && error.message.includes('Admin access restricted')) {
+            return sendForbidden(res, error.message);
+        }
         sendError(res, 'Server error', 500, error);
     }
 };

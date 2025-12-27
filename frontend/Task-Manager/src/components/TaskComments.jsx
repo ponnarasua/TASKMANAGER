@@ -111,7 +111,7 @@ const TaskComments = ({ taskId }) => {
             </div>
 
             {/* Comment Input with Mentions */}
-            <form onSubmit={handleAddComment} className="flex gap-2 mb-4">
+            <form onSubmit={handleAddComment} className="flex gap-2 mb-4" aria-label="Add a comment">
                 <MentionInput
                     value={newComment}
                     onChange={setNewComment}
@@ -131,7 +131,7 @@ const TaskComments = ({ taskId }) => {
             </form>
 
             {/* Comments List */}
-            <div className="space-y-3 max-h-80 overflow-y-auto">
+            <div className="space-y-3 max-h-80 overflow-y-auto" role="list" aria-label="Comments list">
                 {loading ? (
                     <p className="text-sm text-slate-500 dark:text-gray-400">Loading comments...</p>
                 ) : comments.length === 0 ? (
@@ -141,6 +141,8 @@ const TaskComments = ({ taskId }) => {
                         <div
                             key={comment._id}
                             className="bg-slate-50 dark:bg-gray-800 rounded-lg p-3 border border-slate-100 dark:border-gray-700"
+                            role="listitem"
+                            aria-label={`Comment by ${comment.user?.name || 'Unknown User'}`}
                         >
                             <div className="flex items-start justify-between gap-2">
                                 <div className="flex items-center gap-2">
@@ -169,8 +171,16 @@ const TaskComments = ({ taskId }) => {
                                         onClick={() => handleDeleteComment(comment._id)}
                                         className="text-slate-400 dark:text-gray-500 hover:text-red-500 transition-colors"
                                         title="Delete comment"
+                                        aria-label="Delete comment"
+                                        tabIndex={0}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                e.preventDefault();
+                                                handleDeleteComment(comment._id);
+                                            }
+                                        }}
                                     >
-                                        <LuTrash2 className="text-sm" />
+                                        <LuTrash2 className="text-sm" aria-hidden="true" />
                                     </button>
                                 )}
                             </div>

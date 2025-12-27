@@ -1,44 +1,17 @@
-const Notification = require('../models/Notification');
 const { sendError, sendNotFound } = require('../utils/responseHelper');
+const {
+    getNotificationsService,
+    markAsReadService,
+    markAllAsReadService,
+    deleteNotificationService,
+    clearAllNotificationsService
+} = require('../services/notificationService');
+const Notification = require('../models/Notification');
 
-// @desc   Get all notifications for the logged-in user
-// @route  GET /api/notifications
-// @access Private
 const getNotifications = async (req, res) => {
     try {
-        const { page = 1, limit = 20, unreadOnly = false } = req.query;
-        
-        const pageNum = Math.max(1, parseInt(page));
-        const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
-        const skip = (pageNum - 1) * limitNum;
-
-        const filter = { recipient: req.user._id };
-        if (unreadOnly === 'true') {
-            filter.isRead = false;
-        }
-
-        const [notifications, totalCount, unreadCount] = await Promise.all([
-            Notification.find(filter)
-                .populate('sender', 'name profileImageUrl')
-                .populate('task', 'title')
-                .sort({ createdAt: -1 })
-                .skip(skip)
-                .limit(limitNum)
-                .lean(),
-            Notification.countDocuments({ recipient: req.user._id }),
-            Notification.countDocuments({ recipient: req.user._id, isRead: false })
-        ]);
-
-        res.json({
-            notifications,
-            pagination: {
-                page: pageNum,
-                limit: limitNum,
-                total: totalCount,
-                pages: Math.ceil(totalCount / limitNum)
-            },
-            unreadCount
-        });
+        const result = await getNotificationsService(req.user, req.query);
+        res.json(result);
     } catch (error) {
         sendError(res, 'Server error', 500, error);
     }
@@ -65,16 +38,10 @@ const getUnreadCount = async (req, res) => {
 // @access Private
 const markAsRead = async (req, res) => {
     try {
-        const notification = await Notification.findOneAndUpdate(
-            { _id: req.params.id, recipient: req.user._id },
-            { isRead: true, readAt: new Date() },
-            { new: true }
-        );
-
+        const notification = await markAsReadService(req.user, req.params.id);
         if (!notification) {
             return sendNotFound(res, 'Notification');
         }
-
         res.json({ message: 'Notification marked as read', notification });
     } catch (error) {
         sendError(res, 'Server error', 500, error);
@@ -86,11 +53,7 @@ const markAsRead = async (req, res) => {
 // @access Private
 const markAllAsRead = async (req, res) => {
     try {
-        const result = await Notification.updateMany(
-            { recipient: req.user._id, isRead: false },
-            { isRead: true, readAt: new Date() }
-        );
-
+        const result = await markAllAsReadService(req.user);
         res.json({ 
             message: 'All notifications marked as read', 
             modifiedCount: result.modifiedCount 
@@ -105,15 +68,10 @@ const markAllAsRead = async (req, res) => {
 // @access Private
 const deleteNotification = async (req, res) => {
     try {
-        const notification = await Notification.findOneAndDelete({
-            _id: req.params.id,
-            recipient: req.user._id
-        });
-
+        const notification = await deleteNotificationService(req.user, req.params.id);
         if (!notification) {
             return sendNotFound(res, 'Notification');
         }
-
         res.json({ message: 'Notification deleted' });
     } catch (error) {
         sendError(res, 'Server error', 500, error);
@@ -125,8 +83,7 @@ const deleteNotification = async (req, res) => {
 // @access Private
 const clearAllNotifications = async (req, res) => {
     try {
-        const result = await Notification.deleteMany({ recipient: req.user._id });
-
+        const result = await clearAllNotificationsService(req.user);
         res.json({ 
             message: 'All notifications cleared', 
             deletedCount: result.deletedCount 

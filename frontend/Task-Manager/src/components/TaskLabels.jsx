@@ -1,11 +1,27 @@
 import React, { useState, useEffect, useContext } from 'react';
+import PropTypes from 'prop-types';
 import { LuTag, LuX, LuPlus } from 'react-icons/lu';
 import axiosInstance from '../utils/axiosInstance';
 import { API_PATHS } from '../utils/apiPaths';
 import { UserContext } from '../context/userContext';
 import { getLabelColor, SUGGESTED_LABELS } from '../utils/colors';
 
+/**
+ * TaskLabels component for displaying and managing task labels.
+ *
+ * @param {Object} props
+ * @param {string} props.taskId - The ID of the task.
+ * @param {string[]} [props.initialLabels] - Initial labels for the task.
+ * @param {function} [props.onLabelsChange] - Callback when labels change.
+ * @param {boolean} [props.readOnly] - If true, disables editing.
+ */
 const TaskLabels = ({ taskId, initialLabels = [], onLabelsChange, readOnly = false }) => {
+    TaskLabels.propTypes = {
+        taskId: PropTypes.string.isRequired,
+        initialLabels: PropTypes.arrayOf(PropTypes.string),
+        onLabelsChange: PropTypes.func,
+        readOnly: PropTypes.bool,
+    };
     const { user } = useContext(UserContext);
     const [labels, setLabels] = useState(initialLabels);
     const [newLabel, setNewLabel] = useState('');
@@ -91,12 +107,12 @@ const TaskLabels = ({ taskId, initialLabels = [], onLabelsChange, readOnly = fal
     return (
         <div className="mt-4">
             <div className="flex items-center gap-2 mb-2">
-                <LuTag className="text-sm text-slate-500 dark:text-gray-400" />
-                <label className="text-xs font-medium text-slate-500 dark:text-gray-400">Labels</label>
+                <LuTag className="text-sm text-slate-500 dark:text-gray-400" aria-hidden="true" />
+                <label className="text-xs font-medium text-slate-500 dark:text-gray-400" id="task-labels-label">Labels</label>
             </div>
 
             {/* Labels Display */}
-            <div className="flex flex-wrap gap-2 mb-2">
+            <div className="flex flex-wrap gap-2 mb-2" role="list" aria-labelledby="task-labels-label">
                 {labels.length === 0 && readOnly ? (
                     <span className="text-sm text-slate-400 dark:text-gray-500">No labels</span>
                 ) : (
@@ -106,6 +122,8 @@ const TaskLabels = ({ taskId, initialLabels = [], onLabelsChange, readOnly = fal
                             <span
                                 key={label}
                                 className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full ${color.bg} ${color.text} ${color.border} border`}
+                                role="listitem"
+                                aria-label={`Label: ${label}`}
                             >
                                 {label}
                                 {isAdmin && !readOnly && (
@@ -113,8 +131,9 @@ const TaskLabels = ({ taskId, initialLabels = [], onLabelsChange, readOnly = fal
                                         onClick={() => handleRemoveLabel(label)}
                                         className="hover:bg-white/50 rounded-full p-0.5 transition-colors"
                                         disabled={loading}
+                                        aria-label={`Remove label ${label}`}
                                     >
-                                        <LuX className="text-xs" />
+                                        <LuX className="text-xs" aria-hidden="true" />
                                     </button>
                                 )}
                             </span>
@@ -140,6 +159,10 @@ const TaskLabels = ({ taskId, initialLabels = [], onLabelsChange, readOnly = fal
                             placeholder="Add a label..."
                             className="flex-1 px-3 py-1.5 text-sm border border-slate-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                             disabled={loading}
+                            aria-label="Add a label"
+                            aria-autocomplete="list"
+                            aria-controls="label-suggestions-list"
+                            aria-expanded={showSuggestions}
                         />
                         <button
                             onClick={() => handleAddLabel(newLabel)}
@@ -153,14 +176,21 @@ const TaskLabels = ({ taskId, initialLabels = [], onLabelsChange, readOnly = fal
 
                     {/* Suggestions Dropdown */}
                     {showSuggestions && filteredSuggestions.length > 0 && (
-                        <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                            {filteredSuggestions.map((suggestion) => {
+                        <div
+                            id="label-suggestions-list"
+                            role="listbox"
+                            className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-lg shadow-lg max-h-40 overflow-y-auto"
+                        >
+                            {filteredSuggestions.map((suggestion, idx) => {
                                 const color = getLabelColor(suggestion);
                                 return (
                                     <button
                                         key={suggestion}
                                         onClick={() => handleAddLabel(suggestion)}
                                         className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-gray-100"
+                                        role="option"
+                                        aria-selected="false"
+                                        tabIndex={0}
                                     >
                                         <span className={`w-3 h-3 rounded-full ${color.bg}`}></span>
                                         {suggestion}

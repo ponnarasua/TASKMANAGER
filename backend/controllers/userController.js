@@ -4,43 +4,20 @@ const { getOrgDomain, isPublicDomain } = require('../utils/domainHelper');
 const { sendError, sendNotFound, sendForbidden } = require('../utils/responseHelper');
 const { isAdmin } = require('../utils/authHelper');
 const { USER_ROLES } = require('../utils/constants');
+const { sanitizeInput, validateName, validateEmail } = require('../utils/validation');
 
 // @desc Get all users (Admin only)
 // @route GET /api/users/
 // @access Private (Admin)
+const { getUsersService } = require('../services/userService');
 async function getUsers(req, res) {
     try {
-        const adminEmail = req.user.email;
-        const domain = getOrgDomain(adminEmail);
-
-        // Deny access if domain is public
-        if (isPublicDomain(domain)) {
-            return sendForbidden(res, 'Access denied. Admins using public domains like Gmail cannot access users.');
-        }
-
-        // Get only users with the same domain
-        const users = await User.find({
-            role: USER_ROLES.MEMBER,
-            email: { $regex: `@${domain}$`, $options: 'i' }
-        }).select("-password");
-
-        // Add task count to each user
-        const usersWithTaskCounts = await Promise.all(users.map(async (user) => {
-            const pendingTasks = await Task.countDocuments({ assignedTo: user._id, status: "Pending" });
-            const inProgressTasks = await Task.countDocuments({ assignedTo: user._id, status: "In Progress" });
-            const completedTasks = await Task.countDocuments({ assignedTo: user._id, status: "Completed" });
-
-            return {
-                ...user._doc,
-                pendingTasks,
-                inProgressTasks,
-                completedTasks
-            };
-        }));
-
+        const usersWithTaskCounts = await getUsersService(req.user);
         res.json(usersWithTaskCounts);
-
     } catch (error) {
+        if (error.message && error.message.includes('Access denied')) {
+            return sendForbidden(res, error.message);
+        }
         sendError(res, 'Server error', 500, error);
     }
 }
@@ -50,7 +27,8 @@ async function getUsers(req, res) {
 // @access Private
 const getUserById = async (req, res) => {
     try {
-        const user =  await User.findById(req.params.id).select("-password");
+        const userId = sanitizeInput(req.params.id);
+        const user =  await User.findById(userId).select("-password");
         if (!user)  return sendNotFound(res, 'User');
         res.json(user);
     } catch (error) {
@@ -63,8 +41,8 @@ const getUserById = async (req, res) => {
 // @access Private
 const updateUser = async (req, res) => {
     try {
-        const { name, profileImageUrl } = req.body;
-        const userId = req.params.id;
+        let { name, profileImageUrl } = req.body;
+        const userId = sanitizeInput(req.params.id);
 
         // Check if user exists
         const user = await User.findById(userId);
@@ -77,9 +55,19 @@ const updateUser = async (req, res) => {
             return sendForbidden(res, 'Not authorized to update this profile');
         }
 
-        // Update fields if provided
-        if (name) user.name = name;
-        if (profileImageUrl !== undefined) user.profileImageUrl = profileImageUrl;
+        // Validate and sanitize name
+        if (name) {
+            name = sanitizeInput(name);
+            const nameError = validateName(name);
+            if (nameError) {
+                return res.status(400).json({ message: nameError });
+            }
+            user.name = name;
+        }
+        // Sanitize profileImageUrl
+        if (profileImageUrl !== undefined) {
+            user.profileImageUrl = sanitizeInput(profileImageUrl);
+        }
 
         await user.save();
 
@@ -98,8 +86,11 @@ const updateUser = async (req, res) => {
 // @access Private
 const searchUsers = async (req, res) => {
     try {
-        const { q, taskId } = req.query;
-        const searchTerm = q?.trim() || '';
+        let { q, taskId } = req.query;
+        // Sanitize query params
+        q = q ? sanitizeInput(q) : '';
+        taskId = taskId ? sanitizeInput(taskId) : undefined;
+        const searchTerm = q.trim() || '';
 
         const userEmail = req.user.email;
         const domain = getOrgDomain(userEmail);

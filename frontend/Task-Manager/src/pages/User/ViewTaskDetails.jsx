@@ -6,9 +6,11 @@ import DashboardLayout from '../../components/layout/DashboardLayout'
 import moment from 'moment'
 import AvatarGroup from '../../components/AvatarGroup'
 import { LuBell, LuSquareArrowOutUpRight, LuSquarePen } from 'react-icons/lu'
-import TaskComments from '../../components/TaskComments'
-import ActivityLog from '../../components/ActivityLog'
-import TaskLabels from '../../components/TaskLabels'
+import { Suspense, lazy } from 'react';
+
+const TaskComments = lazy(() => import('../../components/TaskComments'));
+const ActivityLog = lazy(() => import('../../components/ActivityLog'));
+const TaskLabels = lazy(() => import('../../components/TaskLabels'));
 import { UserContext } from '../../context/userContext'
 import toast from 'react-hot-toast'
 import { getStatusTagColor } from '../../utils/colors'
@@ -184,17 +186,23 @@ const ViewTaskDetails = () => {
             )}
 
             {/* Task Labels */}
-            <TaskLabels 
-              taskId={id} 
-              initialLabels={task?.labels || []} 
-              onLabelsChange={(newLabels) => setTask({...task, labels: newLabels})}
-            />
+            <Suspense fallback={<div>Loading labels...</div>}>
+              <TaskLabels 
+                taskId={id} 
+                initialLabels={task?.labels || []} 
+                onLabelsChange={(newLabels) => setTask({...task, labels: newLabels})}
+              />
+            </Suspense>
 
             {/* Comments Section */}
-            <TaskComments taskId={id} />
+            <Suspense fallback={<div>Loading comments...</div>}>
+              <TaskComments taskId={id} />
+            </Suspense>
 
             {/* Activity Log */}
-            <ActivityLog taskId={id} />
+            <Suspense fallback={<div>Loading activity log...</div>}>
+              <ActivityLog taskId={id} />
+            </Suspense>
           </div>
         </div>
         )}

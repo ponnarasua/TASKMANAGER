@@ -9,6 +9,7 @@ const { sendError, sendForbidden } = require('../utils/responseHelper');
 // @route GET /api/reports/export/tasks
 // @access Private (Admin)
 const { exportTasksReportService } = require('../services/reportService');
+const { exportUsersReportService } = require('../services/userReportService');
 const exportTasksReport = async(req, res) => {
     try {
         const workbook = await exportTasksReportService(req.user);
@@ -28,68 +29,14 @@ const exportTasksReport = async(req, res) => {
 // @access Private (Admin)
 const exportUsersReport = async (req, res) => {
     try {
-        const domain = getOrgDomain(req.user.email);
-        if (isPublicDomain(domain)) {
-            return sendForbidden(res, 'Export not allowed for public domain admins.');
-        }
-
-        const emailRegex = buildOrgEmailRegex(domain);
-        const users = await User.find({ email: emailRegex }).select("name email _id").lean();
-        const userIds = users.map(user => user._id.toString());
-
-        const userTasks = await Task.find()
-            .populate({
-                path: 'assignedTo',
-                select: 'name email _id',
-                match: { email: emailRegex }
-            });
-
-        const userTaskMap = {};
-        users.forEach(user => {
-            userTaskMap[user._id] = {
-                name: user.name,
-                email: user.email,
-                taskCount: 0,
-                pendingTasks: 0,
-                inProgressTasks: 0,
-                completedTasks: 0,
-            };
-        });
-
-        userTasks.forEach(task => {
-            if (!Array.isArray(task.assignedTo)) return;
-
-            task.assignedTo.forEach(assignedUser => {
-                if (userTaskMap[assignedUser._id]) {
-                    userTaskMap[assignedUser._id].taskCount++;
-                    if (task.status === "Pending") userTaskMap[assignedUser._id].pendingTasks++;
-                    else if (task.status === "In Progress") userTaskMap[assignedUser._id].inProgressTasks++;
-                    else if (task.status === "Completed") userTaskMap[assignedUser._id].completedTasks++;
-                }
-            });
-        });
-
-        const workbook = new excelJS.Workbook();
-        const worksheet = workbook.addWorksheet("User Task Report");
-
-        worksheet.columns = [
-            { header: "User Name", key: "name", width: 30 },
-            { header: "Email", key: "email", width: 40 },
-            { header: "Total Assigned Tasks", key: "taskCount", width: 20 },
-            { header: "Pending Tasks", key: "pendingTasks", width: 20 },
-            { header: "In Progress Tasks", key: "inProgressTasks", width: 20 },
-            { header: "Completed Tasks", key: "completedTasks", width: 20 },
-        ];
-
-        Object.values(userTaskMap).forEach(user => {
-            worksheet.addRow(user);
-        });
-
+        const workbook = await exportUsersReportService(req.user);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         res.setHeader("Content-Disposition", `attachment; filename=user_tasks_report.xlsx`);
         return workbook.xlsx.write(res).then(() => res.status(200).end());
-
     } catch (error) {
+        if (error.message && error.message.includes('Export not allowed')) {
+            return sendForbidden(res, error.message);
+        }
         sendError(res, 'Error exporting user tasks', 500, error);
     }
 };

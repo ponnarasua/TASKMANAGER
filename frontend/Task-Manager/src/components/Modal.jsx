@@ -3,13 +3,19 @@ import React from 'react'
 const Modal = ({children, isOpen, onClose, title}) => {
     if(!isOpen) return;
   return (
-    <div className='fixed top-0 right-0 left-0 z-50 flex justify-center items-center w-full h-[calc(100%-1rem)] max-h-full overflow-y-auto overflow-x-hidden bg-black/40'>
+    <div
+      className='fixed top-0 right-0 left-0 z-50 flex justify-center items-center w-full h-[calc(100%-1rem)] max-h-full overflow-y-auto overflow-x-hidden bg-black/40'
+      role='dialog'
+      aria-modal='true'
+      aria-labelledby='modal-title'
+      tabIndex='-1'
+    >
       <div className='relative p-4 w-full max-w-2xl max-h-full'>
         {/* Modal content */}
         <div className='relative bg-white rounded-lg shadow-lg dark:bg-gray-900 border border-gray-200 dark:border-gray-800'>
           {/*Modal header*/}
           <div className='flex items-center justify-between p-4 md:p-5 border-b rounded-t dark:border-gray-700 border-gray-200'>
-            <h3 className='text-lg font-medium text-gray-900 dark:text-white'>
+            <h3 id='modal-title' className='text-lg font-medium text-gray-900 dark:text-white'>
               {title}
             </h3>
             <button 
